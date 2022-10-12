@@ -54,11 +54,6 @@ jobs:
       - name: CMake
         run: cmake . -DBUILD_PERF_TOOLS=ON
 
-      - name: Set up clang-format
-        uses: jidicula/clang-format-action@v4.9.0
-        with:
-          clang-format-version: '10'
-
       - name: Format
         run: |
           ls /usr/bin/clang-format-*
