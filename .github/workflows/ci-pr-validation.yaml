@@ -52,7 +52,7 @@ jobs:
                 libgtest-dev
 
       - name: CMake
-        run: cmake . -DBUILD_PERF_TOOLS=ON
+        run: cmake . -DBUILD_PERF_TOOLS=ON -DCLANG_FORMAT_VERSION=10
 
       - name: Format
         run: |
