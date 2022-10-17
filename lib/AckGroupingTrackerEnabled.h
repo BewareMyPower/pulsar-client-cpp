@@ -41,13 +41,13 @@ class AckGroupingTrackerEnabled : public AckGroupingTracker {
 
     /**
      * Constructing ACK grouping tracker for peresistent topics.
-     * @param[in] clientPtr pointer to client object.
+     * @param[in] client the Client object.
      * @param[in] handlerPtr the shared pointer to connection handler.
      * @param[in] consumerId consumer ID that this tracker belongs to.
      * @param[in] ackGroupingTimeMs ACK grouping time window in milliseconds.
      * @param[in] ackGroupingMaxSize max. number of ACK requests can be grouped.
      */
-    AckGroupingTrackerEnabled(ClientImplPtr clientPtr, const HandlerBasePtr& handlerPtr, uint64_t consumerId,
+    AckGroupingTrackerEnabled(ClientImpl& client, const HandlerBasePtr& handlerPtr, uint64_t consumerId,
                               long ackGroupingTimeMs, long ackGroupingMaxSize);
 
     void start() override;

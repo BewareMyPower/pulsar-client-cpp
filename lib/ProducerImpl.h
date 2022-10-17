@@ -54,7 +54,7 @@ class ProducerImpl : public HandlerBase,
                      public std::enable_shared_from_this<ProducerImpl>,
                      public ProducerImplBase {
    public:
-    ProducerImpl(ClientImplPtr client, const TopicName& topic,
+    ProducerImpl(ClientImpl& client, const TopicName& topic,
                  const ProducerConfiguration& producerConfiguration, int32_t partition = -1);
     ~ProducerImpl();
 
@@ -109,6 +109,7 @@ class ProducerImpl : public HandlerBase,
     friend class BatchMessageContainer;
 
     // overrided methods from HandlerBase
+    void beforeConnectionChange(ClientConnection& connection) override;
     void connectionOpened(const ClientConnectionPtr& connection) override;
     void connectionFailed(Result result) override;
     HandlerBaseWeakPtr get_weak_from_this() override { return shared_from_this(); }
@@ -119,8 +120,6 @@ class ProducerImpl : public HandlerBase,
 
     void handleCreateProducer(const ClientConnectionPtr& cnx, Result result,
                               const ResponseData& responseData);
-
-    void handleClose(Result result, ResultCallback callback, ProducerImplPtr producer);
 
     void resendMessages(ClientConnectionPtr cnx);
 

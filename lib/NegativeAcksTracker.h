@@ -31,7 +31,7 @@ namespace pulsar {
 
 class NegativeAcksTracker {
    public:
-    NegativeAcksTracker(ClientImplPtr client, ConsumerImpl &consumer, const ConsumerConfiguration &conf);
+    NegativeAcksTracker(ClientImpl &client, ConsumerImpl &consumer, const ConsumerConfiguration &conf);
 
     NegativeAcksTracker(const NegativeAcksTracker &) = delete;
 

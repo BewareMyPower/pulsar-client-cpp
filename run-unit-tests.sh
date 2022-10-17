@@ -41,6 +41,7 @@ if [ -f /gtest-parallel ]; then
         tests="--gtest_filter=$1"
         echo "Running tests: $1"
     fi
+    mkdir -p ~/.cache
     python3 /gtest-parallel $tests --dump_json_test_results=/tmp/gtest_parallel_results.json \
       --workers=$gtest_workers --retry_failed=$RETRY_FAILED -d /tmp \
       ./pulsar-tests --gtest_filter='-CustomLoggerTest*'

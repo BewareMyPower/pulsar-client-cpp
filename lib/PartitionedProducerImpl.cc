@@ -23,6 +23,7 @@
 #include "RoundRobinMessageRouter.h"
 #include "SinglePartitionMessageRouter.h"
 #include "TopicMetadataImpl.h"
+#include "ClientImpl.h"
 
 DECLARE_LOG_OBJECT()
 
@@ -30,7 +31,7 @@ namespace pulsar {
 
 const std::string PartitionedProducerImpl::PARTITION_NAME_SUFFIX = "-partition-";
 
-PartitionedProducerImpl::PartitionedProducerImpl(ClientImplPtr client, const TopicNamePtr topicName,
+PartitionedProducerImpl::PartitionedProducerImpl(ClientImpl& client, const TopicNamePtr topicName,
                                                  const unsigned int numPartitions,
                                                  const ProducerConfiguration& config)
     : client_(client),
@@ -46,12 +47,12 @@ PartitionedProducerImpl::PartitionedProducerImpl(ClientImplPtr client, const Top
                  (int)(config.getMaxPendingMessagesAcrossPartitions() / numPartitions));
     conf_.setMaxPendingMessages(maxPendingMessagesPerPartition);
 
-    auto partitionsUpdateInterval = static_cast<unsigned int>(client_->conf().getPartitionsUpdateInterval());
+    auto partitionsUpdateInterval = static_cast<unsigned int>(client_.conf().getPartitionsUpdateInterval());
     if (partitionsUpdateInterval > 0) {
-        listenerExecutor_ = client_->getListenerExecutorProvider()->get();
+        listenerExecutor_ = client_.getListenerExecutorProvider()->get();
         partitionsUpdateTimer_ = listenerExecutor_->createDeadlineTimer();
         partitionsUpdateInterval_ = boost::posix_time::seconds(partitionsUpdateInterval);
-        lookupServicePtr_ = client_->getLookup();
+        lookupServicePtr_ = client_.getLookup();
     }
 }
 
@@ -71,7 +72,7 @@ MessageRoutingPolicyPtr PartitionedProducerImpl::getMessageRouter() {
     }
 }
 
-PartitionedProducerImpl::~PartitionedProducerImpl() {}
+PartitionedProducerImpl::~PartitionedProducerImpl() { shutdown(); }
 // override
 const std::string& PartitionedProducerImpl::getTopic() const { return topic_; }
 
@@ -211,7 +212,15 @@ void PartitionedProducerImpl::sendAsync(const Message& msg, SendCallback callbac
 }
 
 // override
-void PartitionedProducerImpl::shutdown() { state_ = Closed; }
+void PartitionedProducerImpl::shutdown() {
+    if (partitionsUpdateTimer_) {
+        boost::system::error_code ec;
+        partitionsUpdateTimer_->cancel(ec);
+    }
+    client_.cleanupProducer(this);
+    partitionedProducerCreatedPromise_.setFailed(ResultAlreadyClosed);
+    state_ = Closed;
+}
 
 const std::string& PartitionedProducerImpl::getProducerName() const {
     Lock producersLock(producersMutex_);
@@ -239,11 +248,28 @@ int64_t PartitionedProducerImpl::getLastSequenceId() const {
  * if createProducerCallback is set, it means the closeAsync is called from CreateProducer API which failed to
  * create one or many producers for partitions. So, we have to notify with ERROR on createProducerFailure
  */
-void PartitionedProducerImpl::closeAsync(CloseCallback closeCallback) {
-    if (state_ == Closing || state_ == Closed) {
+void PartitionedProducerImpl::closeAsync(CloseCallback originalCallback) {
+    auto closeCallback = [this, originalCallback](Result result) {
+        if (result == ResultOk) {
+            shutdown();
+        }
+        if (originalCallback) {
+            originalCallback(result);
+        }
+    };
+    if (state_ == Closed) {
+        closeCallback(ResultAlreadyClosed);
         return;
     }
-    state_ = Closing;
+    State expectedState = Ready;
+    if (!state_.compare_exchange_strong(expectedState, Closing)) {
+        return;
+    }
+
+    if (partitionsUpdateTimer_) {
+        boost::system::error_code ec;
+        partitionsUpdateTimer_->cancel(ec);
+    }
 
     unsigned int producerAlreadyClosed = 0;
 
@@ -271,8 +297,7 @@ void PartitionedProducerImpl::closeAsync(CloseCallback closeCallback) {
      * c. If closeAsync called due to failure in creating just one sub producer then state is set by
      * handleSinglePartitionProducerCreated
      */
-    if (producerAlreadyClosed == numProducers && closeCallback) {
-        state_ = Closed;
+    if (producerAlreadyClosed == numProducers) {
         closeCallback(ResultOk);
     }
 }
@@ -285,11 +310,9 @@ void PartitionedProducerImpl::handleSinglePartitionProducerClose(Result result,
         return;
     }
     if (result != ResultOk) {
-        state_ = Failed;
         LOG_ERROR("Closing the producer failed for partition - " << partitionIndex);
-        if (callback) {
-            callback(result);
-        }
+        callback(result);
+        state_ = Failed;
         return;
     }
     assert(partitionIndex < getNumPartitionsWithLock());
@@ -305,9 +328,7 @@ void PartitionedProducerImpl::handleSinglePartitionProducerClose(Result result,
         // if there's any adverse effect of setting it again. It should not
         // be but must check. MUSTCHECK changeme
         partitionedProducerCreatedPromise_.setFailed(ResultUnknownError);
-        if (callback) {
-            callback(result);
-        }
+        callback(result);
         return;
     }
 }

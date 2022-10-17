@@ -74,12 +74,13 @@ class SynchronizedHashMap {
 
     // clear the map and apply `f` on each removed value
     void clear(std::function<void(const K&, const V&)> f) {
-        Lock lock(mutex_);
-        auto it = data_.begin();
-        while (it != data_.end()) {
-            f(it->first, it->second);
-            auto next = data_.erase(it);
-            it = next;
+        MapType data;
+        {
+            Lock lock(mutex_);
+            data_.swap(data);
+        }
+        for (auto&& kv : data) {
+            f(kv.first, kv.second);
         }
     }
 
@@ -125,14 +126,20 @@ class SynchronizedHashMap {
         return pairs;
     }
 
-    // This method is only used for test
     size_t size() const noexcept {
         Lock lock(mutex_);
         return data_.size();
     }
 
+    MapType move() noexcept {
+        Lock lock(mutex_);
+        MapType data;
+        data_.swap(data);
+        return data;
+    }
+
    private:
-    std::unordered_map<K, V> data_;
+    MapType data_;
     // Use recursive_mutex to allow methods being called in `forEach`
     mutable MutexType mutex_;
 };

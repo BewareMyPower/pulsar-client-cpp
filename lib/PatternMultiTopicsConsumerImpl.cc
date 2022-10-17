@@ -17,13 +17,13 @@
  * under the License.
  */
 #include "PatternMultiTopicsConsumerImpl.h"
+#include "ClientImpl.h"
 
 DECLARE_LOG_OBJECT()
 
 using namespace pulsar;
 
-PatternMultiTopicsConsumerImpl::PatternMultiTopicsConsumerImpl(ClientImplPtr client,
-                                                               const std::string pattern,
+PatternMultiTopicsConsumerImpl::PatternMultiTopicsConsumerImpl(ClientImpl& client, const std::string pattern,
                                                                const std::vector<std::string>& topics,
                                                                const std::string& subscriptionName,
                                                                const ConsumerConfiguration& conf,
@@ -217,7 +217,7 @@ void PatternMultiTopicsConsumerImpl::start() {
 
     // Init autoDiscoveryTimer task only once, wait for the timeout to happen
     if (!autoDiscoveryTimer_ && conf_.getPatternAutoDiscoveryPeriod() > 0) {
-        autoDiscoveryTimer_ = client_->getIOExecutorProvider()->get()->createDeadlineTimer();
+        autoDiscoveryTimer_ = client_.getIOExecutorProvider()->get()->createDeadlineTimer();
         autoDiscoveryTimer_->expires_from_now(seconds(conf_.getPatternAutoDiscoveryPeriod()));
         autoDiscoveryTimer_->async_wait(
             std::bind(&PatternMultiTopicsConsumerImpl::autoDiscoveryTimerTask, this, std::placeholders::_1));
@@ -225,13 +225,13 @@ void PatternMultiTopicsConsumerImpl::start() {
 }
 
 void PatternMultiTopicsConsumerImpl::shutdown() {
-    Lock lock(mutex_);
-    state_ = Closed;
-    autoDiscoveryTimer_->cancel();
-    multiTopicsConsumerCreatedPromise_.setFailed(ResultAlreadyClosed);
+    boost::system::error_code ec;
+    autoDiscoveryTimer_->cancel(ec);
+    MultiTopicsConsumerImpl::shutdown();
 }
 
 void PatternMultiTopicsConsumerImpl::closeAsync(ResultCallback callback) {
+    boost::system::error_code ec;
+    autoDiscoveryTimer_->cancel(ec);
     MultiTopicsConsumerImpl::closeAsync(callback);
-    autoDiscoveryTimer_->cancel();
 }

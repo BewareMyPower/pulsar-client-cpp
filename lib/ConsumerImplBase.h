@@ -41,7 +41,7 @@ class OpBatchReceive {
 class ConsumerImplBase : public HandlerBase, public std::enable_shared_from_this<ConsumerImplBase> {
    public:
     virtual ~ConsumerImplBase(){};
-    ConsumerImplBase(ClientImplPtr client, const std::string& topic, Backoff backoff,
+    ConsumerImplBase(ClientImpl& client, const std::string& topic, Backoff backoff,
                      const ConsumerConfiguration& conf, ExecutorServicePtr listenerExecutor);
 
     // interface by consumer

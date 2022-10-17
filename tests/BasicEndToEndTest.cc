@@ -3739,10 +3739,9 @@ TEST(BasicEndToEndTest, testAckGroupingTrackerDisabledCumulativeAck) {
 
 class AckGroupingTrackerEnabledMock : public AckGroupingTrackerEnabled {
    public:
-    AckGroupingTrackerEnabledMock(ClientImplPtr clientPtr, const HandlerBasePtr &handlerPtr,
-                                  uint64_t consumerId, long ackGroupingTimeMs, long ackGroupingMaxSize)
-        : AckGroupingTrackerEnabled(clientPtr, handlerPtr, consumerId, ackGroupingTimeMs,
-                                    ackGroupingMaxSize) {}
+    AckGroupingTrackerEnabledMock(ClientImpl &client, const HandlerBasePtr &handlerPtr, uint64_t consumerId,
+                                  long ackGroupingTimeMs, long ackGroupingMaxSize)
+        : AckGroupingTrackerEnabled(client, handlerPtr, consumerId, ackGroupingTimeMs, ackGroupingMaxSize) {}
     const std::set<MessageId> &getPendingIndividualAcks() { return this->pendingIndividualAcks_; }
     const long getAckGroupingTimeMs() { return this->ackGroupingTimeMs_; }
     const long getAckGroupingMaxSize() { return this->ackGroupingMaxSize_; }
@@ -3785,7 +3784,7 @@ TEST(BasicEndToEndTest, testAckGroupingTrackerEnabledIndividualAck) {
     }
 
     auto tracker = std::make_shared<AckGroupingTrackerEnabledMock>(
-        clientImplPtr, consumerImpl, consumerImpl->getConsumerId(), ackGroupingTimeMs, ackGroupingMaxSize);
+        *clientImplPtr, consumerImpl, consumerImpl->getConsumerId(), ackGroupingTimeMs, ackGroupingMaxSize);
     tracker->start();
     ASSERT_EQ(tracker->getPendingIndividualAcks().size(), 0);
     ASSERT_EQ(tracker->getAckGroupingTimeMs(), ackGroupingTimeMs);
@@ -3846,7 +3845,7 @@ TEST(BasicEndToEndTest, testAckGroupingTrackerEnabledCumulativeAck) {
     std::sort(recvMsgId.begin(), recvMsgId.end());
 
     auto tracker0 = std::make_shared<AckGroupingTrackerEnabledMock>(
-        clientImplPtr, consumerImpl0, consumerImpl0->getConsumerId(), ackGroupingTimeMs, ackGroupingMaxSize);
+        *clientImplPtr, consumerImpl0, consumerImpl0->getConsumerId(), ackGroupingTimeMs, ackGroupingMaxSize);
     tracker0->start();
     ASSERT_EQ(tracker0->getNextCumulativeAckMsgId(), MessageId::earliest());
     ASSERT_FALSE(tracker0->requireCumulativeAck());
@@ -3882,7 +3881,7 @@ TEST(BasicEndToEndTest, testAckGroupingTrackerEnabledCumulativeAck) {
     auto ret = consumer.receive(msg, 1000);
     ASSERT_EQ(ResultTimeout, ret) << "Received redundant message: " << msg.getDataAsString();
     auto tracker1 = std::make_shared<AckGroupingTrackerEnabledMock>(
-        clientImplPtr, consumerImpl1, consumerImpl1->getConsumerId(), ackGroupingTimeMs, ackGroupingMaxSize);
+        *clientImplPtr, consumerImpl1, consumerImpl1->getConsumerId(), ackGroupingTimeMs, ackGroupingMaxSize);
     tracker1->start();
     tracker1->addAcknowledgeCumulative(recvMsgId[numMsg - 1]);
     tracker1->close();
@@ -3895,7 +3894,7 @@ TEST(BasicEndToEndTest, testAckGroupingTrackerEnabledCumulativeAck) {
 
 class UnAckedMessageTrackerEnabledMock : public UnAckedMessageTrackerEnabled {
    public:
-    UnAckedMessageTrackerEnabledMock(long timeoutMs, const ClientImplPtr client, ConsumerImplBase &consumer)
+    UnAckedMessageTrackerEnabledMock(long timeoutMs, ClientImpl &client, ConsumerImplBase &consumer)
         : UnAckedMessageTrackerEnabled(timeoutMs, timeoutMs, client, consumer) {}
     const long getUnAckedMessagesTimeoutMs() { return this->timeoutMs_; }
     const long getTickDurationInMs() { return this->tickDurationInMs_; }
@@ -3990,7 +3989,7 @@ TEST(BasicEndToEndTest, testUnAckedMessageTrackerEnabledIndividualAck) {
     }
 
     auto tracker0 = std::make_shared<UnAckedMessageTrackerEnabledMock>(unAckedMessagesTimeoutMs,
-                                                                       clientImplPtr, consumerImpl0);
+                                                                       *clientImplPtr, consumerImpl0);
     ASSERT_EQ(tracker0->getUnAckedMessagesTimeoutMs(), unAckedMessagesTimeoutMs);
     ASSERT_EQ(tracker0->getTickDurationInMs(), unAckedMessagesTimeoutMs);
 
@@ -4016,7 +4015,7 @@ TEST(BasicEndToEndTest, testUnAckedMessageTrackerEnabledIndividualAck) {
     }
 
     auto tracker1 = std::make_shared<UnAckedMessageTrackerEnabledMock>(unAckedMessagesTimeoutMs,
-                                                                       clientImplPtr, consumerImpl1);
+                                                                       *clientImplPtr, consumerImpl1);
     for (auto idx = 0; idx < numMsg; ++idx) {
         ASSERT_TRUE(tracker1->add(recvMsgId[idx]));
         ASSERT_TRUE(tracker1->remove(recvMsgId[idx]));
@@ -4064,8 +4063,8 @@ TEST(BasicEndToEndTest, testUnAckedMessageTrackerEnabledCumulativeAck) {
         ASSERT_EQ(ResultOk, consumer.receive(msg, 1000));
         recvMsgId.emplace_back(msg.getMessageId());
     }
-    auto tracker = std::make_shared<UnAckedMessageTrackerEnabledMock>(unAckedMessagesTimeoutMs, clientImplPtr,
-                                                                      consumerImpl0);
+    auto tracker = std::make_shared<UnAckedMessageTrackerEnabledMock>(unAckedMessagesTimeoutMs,
+                                                                      *clientImplPtr, consumerImpl0);
     for (auto idx = 0; idx < numMsg; ++idx) {
         ASSERT_TRUE(tracker->add(recvMsgId[idx]));
     }

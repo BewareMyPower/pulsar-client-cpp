@@ -22,6 +22,7 @@
 #include "HandlerBase.h"
 #include "PulsarApi.pb.h"
 #include <pulsar/MessageId.h>
+#include "LogUtils.h"
 
 namespace pulsar {
 

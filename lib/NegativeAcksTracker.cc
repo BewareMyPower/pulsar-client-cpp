@@ -29,11 +29,11 @@ DECLARE_LOG_OBJECT()
 
 namespace pulsar {
 
-NegativeAcksTracker::NegativeAcksTracker(ClientImplPtr client, ConsumerImpl &consumer,
+NegativeAcksTracker::NegativeAcksTracker(ClientImpl &client, ConsumerImpl &consumer,
                                          const ConsumerConfiguration &conf)
     : consumer_(consumer),
       timerInterval_(0),
-      executor_(client->getIOExecutorProvider()->get()),
+      executor_(client.getIOExecutorProvider()->get()),
       enabledForTesting_(true) {
     static const long MIN_NACK_DELAY_MILLIS = 100;
 

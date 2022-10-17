@@ -37,15 +37,14 @@ namespace pulsar {
 
 DECLARE_LOG_OBJECT()
 
-ConsumerImpl::ConsumerImpl(const ClientImplPtr client, const std::string& topic,
-                           const std::string& subscriptionName, const ConsumerConfiguration& conf,
-                           bool isPersistent,
+ConsumerImpl::ConsumerImpl(ClientImpl& client, const std::string& topic, const std::string& subscriptionName,
+                           const ConsumerConfiguration& conf, bool isPersistent,
                            const ExecutorServicePtr listenerExecutor /* = NULL by default */,
                            bool hasParent /* = false by default */,
                            const ConsumerTopicType consumerTopicType /* = NonPartitioned by default */,
                            Commands::SubscriptionMode subscriptionMode, Optional<MessageId> startMessageId)
     : ConsumerImplBase(client, topic, Backoff(milliseconds(100), seconds(60), milliseconds(0)), conf,
-                       listenerExecutor ? listenerExecutor : client->getListenerExecutorProvider()->get()),
+                       listenerExecutor ? listenerExecutor : client.getListenerExecutorProvider()->get()),
       waitingForZeroQueueSizeMessage(false),
       config_(conf),
       subscription_(subscriptionName),
@@ -60,7 +59,7 @@ ConsumerImpl::ConsumerImpl(const ClientImplPtr client, const std::string& topic,
       incomingMessages_(std::max(config_.getReceiverQueueSize(), 1)),
       availablePermits_(0),
       receiverQueueRefillThreshold_(config_.getReceiverQueueSize() / 2),
-      consumerId_(client->newConsumerId()),
+      consumerId_(client_.newConsumerId()),
       consumerName_(config_.getConsumerName()),
       messageListenerRunning_(true),
       batchAcknowledgementTracker_(topic_, subscriptionName, (long)consumerId_),
@@ -88,10 +87,10 @@ ConsumerImpl::ConsumerImpl(const ClientImplPtr client, const std::string& topic,
     }
 
     // Setup stats reporter.
-    unsigned int statsIntervalInSeconds = client->getClientConfig().getStatsIntervalInSeconds();
+    unsigned int statsIntervalInSeconds = client_.getClientConfig().getStatsIntervalInSeconds();
     if (statsIntervalInSeconds) {
         consumerStatsBasePtr_ = std::make_shared<ConsumerStatsImpl>(
-            consumerStr_, client->getIOExecutorProvider()->get(), statsIntervalInSeconds);
+            consumerStr_, client_.getIOExecutorProvider()->get(), statsIntervalInSeconds);
     } else {
         consumerStatsBasePtr_ = std::make_shared<ConsumerStatsDisabled>();
     }
@@ -104,7 +103,6 @@ ConsumerImpl::ConsumerImpl(const ClientImplPtr client, const std::string& topic,
 
 ConsumerImpl::~ConsumerImpl() {
     LOG_DEBUG(getName() << "~ConsumerImpl");
-    incomingMessages_.clear();
     if (state_ == Ready) {
         // this could happen at least in this condition:
         //      consumer seek, caused reconnection, if consumer close happened before connection ready,
@@ -113,14 +111,14 @@ ConsumerImpl::~ConsumerImpl() {
         LOG_WARN(getName() << "Destroyed consumer which was not properly closed");
 
         ClientConnectionPtr cnx = getCnx().lock();
-        ClientImplPtr client = client_.lock();
-        int requestId = client->newRequestId();
+        int requestId = client_.newRequestId();
         if (cnx) {
             cnx->sendRequestWithId(Commands::newCloseConsumer(consumerId_, requestId), requestId);
             cnx->removeConsumer(consumerId_);
             LOG_INFO(getName() << "Closed consumer for race condition: " << consumerId_);
         }
     }
+    shutdown();
 }
 
 void ConsumerImpl::setPartitionIndex(int partitionIndex) { partitionIndex_ = partitionIndex; }
@@ -145,7 +143,7 @@ void ConsumerImpl::start() {
     if (TopicName::get(topic_)->isPersistent()) {
         if (config_.getAckGroupingTimeMs() > 0) {
             ackGroupingTrackerPtr_.reset(new AckGroupingTrackerEnabled(
-                client_.lock(), get_shared_this_ptr(), consumerId_, config_.getAckGroupingTimeMs(),
+                client_, shared_from_this(), consumerId_, config_.getAckGroupingTimeMs(),
                 config_.getAckGroupingMaxSize()));
         } else {
             ackGroupingTrackerPtr_.reset(new AckGroupingTrackerDisabled(*this, consumerId_));
@@ -155,6 +153,8 @@ void ConsumerImpl::start() {
     }
     ackGroupingTrackerPtr_->start();
 }
+
+void ConsumerImpl::beforeConnectionChange(ClientConnection& cnx) { cnx.removeConsumer(consumerId_); }
 
 void ConsumerImpl::connectionOpened(const ClientConnectionPtr& cnx) {
     if (state_ == Closed) {
@@ -182,8 +182,7 @@ void ConsumerImpl::connectionOpened(const ClientConnectionPtr& cnx) {
     unAckedMessageTrackerPtr_->clear();
     batchAcknowledgementTracker_.clear();
 
-    ClientImplPtr client = client_.lock();
-    uint64_t requestId = client->newRequestId();
+    uint64_t requestId = client_.newRequestId();
     SharedBuffer cmd = Commands::newSubscribe(
         topic_, subscription_, consumerId_, requestId, getSubType(), consumerName_, subscriptionMode_,
         subscribeMessageId, readCompacted_, config_.getProperties(), config_.getSubscriptionProperties(),
@@ -199,6 +198,7 @@ void ConsumerImpl::connectionFailed(Result result) {
     auto ptr = get_shared_this_ptr();
 
     if (consumerCreatedPromise_.setFailed(result)) {
+        client_.cleanupConsumer(this);
         state_ = Failed;
     }
 }
@@ -220,7 +220,7 @@ void ConsumerImpl::handleCreateConsumer(const ClientConnectionPtr& cnx, Result r
         LOG_INFO(getName() << "Created consumer on broker " << cnx->cnxString());
         {
             Lock lock(mutex_);
-            connection_ = cnx;
+            setCnx(cnx);
             incomingMessages_.clear();
             state_ = Ready;
             backoff_.reset();
@@ -242,10 +242,11 @@ void ConsumerImpl::handleCreateConsumer(const ClientConnectionPtr& cnx, Result r
         consumerCreatedPromise_.setValue(get_shared_this_ptr());
     } else {
         if (result == ResultTimeout) {
+            client_.cleanupConsumer(this);
             // Creating the consumer has timed out. We need to ensure the broker closes the consumer
             // in case it was indeed created, otherwise it might prevent new subscribe operation,
             // since we are not closing the connection
-            int requestId = client_.lock()->newRequestId();
+            int requestId = client_.newRequestId();
             cnx->sendRequestWithId(Commands::newCloseConsumer(consumerId_, requestId), requestId);
         }
 
@@ -267,13 +268,23 @@ void ConsumerImpl::handleCreateConsumer(const ClientConnectionPtr& cnx, Result r
     }
 }
 
-void ConsumerImpl::unsubscribeAsync(ResultCallback callback) {
+void ConsumerImpl::unsubscribeAsync(ResultCallback originalCallback) {
     LOG_INFO(getName() << "Unsubscribing");
 
+    auto callback = [this, originalCallback](Result result) {
+        if (result == ResultOk) {
+            shutdown();
+            LOG_INFO(getName() << "Unsubscribed successfully");
+        } else {
+            state_ = Ready;
+            LOG_WARN(getName() << "Failed to unsubscribe: " << result);
+        }
+        if (originalCallback) {
+            originalCallback(result);
+        }
+    };
     if (state_ != Ready) {
         callback(ResultAlreadyClosed);
-        LOG_ERROR(getName() << "Can not unsubscribe a closed subscription, please call subscribe again and "
-                               "then call unsubscribe");
         return;
     }
 
@@ -282,29 +293,17 @@ void ConsumerImpl::unsubscribeAsync(ResultCallback callback) {
     ClientConnectionPtr cnx = getCnx().lock();
     if (cnx) {
         LOG_DEBUG(getName() << "Unsubscribe request sent for consumer - " << consumerId_);
-        ClientImplPtr client = client_.lock();
         lock.unlock();
-        int requestId = client->newRequestId();
+        int requestId = client_.newRequestId();
         SharedBuffer cmd = Commands::newUnsubscribe(consumerId_, requestId);
+        auto self = get_shared_this_ptr();
         cnx->sendRequestWithId(cmd, requestId)
-            .addListener(std::bind(&ConsumerImpl::handleUnsubscribe, get_shared_this_ptr(),
-                                   std::placeholders::_1, callback));
+            .addListener([self, callback](Result result, const ResponseData&) { callback(result); });
     } else {
         Result result = ResultNotConnected;
         lock.unlock();
-        LOG_WARN(getName() << "Failed to unsubscribe: " << strResult(result));
         callback(result);
     }
-}
-
-void ConsumerImpl::handleUnsubscribe(Result result, ResultCallback callback) {
-    if (result == ResultOk) {
-        state_ = Closed;
-        LOG_INFO(getName() << "Unsubscribed successfully");
-    } else {
-        LOG_WARN(getName() << "Failed to unsubscribe: " << strResult(result));
-    }
-    callback(result);
 }
 
 Optional<SharedBuffer> ConsumerImpl::processMessageChunk(const SharedBuffer& payload,
@@ -934,6 +933,13 @@ void ConsumerImpl::statsCallback(Result res, ResultCallback callback, proto::Com
 }
 
 void ConsumerImpl::acknowledgeAsync(const MessageId& msgId, ResultCallback callback) {
+    if (state_ != Ready) {
+        if (callback) {
+            callback(ResultAlreadyClosed);
+        }
+        return;
+    }
+
     ResultCallback cb = std::bind(&ConsumerImpl::statsCallback, get_shared_this_ptr(), std::placeholders::_1,
                                   callback, proto::CommandAck_AckType_Individual);
     if (msgId.batchIndex() != -1 &&
@@ -945,6 +951,12 @@ void ConsumerImpl::acknowledgeAsync(const MessageId& msgId, ResultCallback callb
 }
 
 void ConsumerImpl::acknowledgeCumulativeAsync(const MessageId& msgId, ResultCallback callback) {
+    if (state_ != Ready) {
+        if (callback) {
+            callback(ResultAlreadyClosed);
+        }
+        return;
+    }
     ResultCallback cb = std::bind(&ConsumerImpl::statsCallback, get_shared_this_ptr(), std::placeholders::_1,
                                   callback, proto::CommandAck_AckType_Cumulative);
     if (!isCumulativeAcknowledgementAllowed(config_.getConsumerType())) {
@@ -990,20 +1002,25 @@ void ConsumerImpl::negativeAcknowledge(const MessageId& messageId) {
 
 void ConsumerImpl::disconnectConsumer() {
     LOG_INFO("Broker notification of Closed consumer: " << consumerId_);
-    Lock lock(mutex_);
-    connection_.reset();
-    lock.unlock();
+    resetCnx();
     scheduleReconnection(get_shared_this_ptr());
 }
 
-void ConsumerImpl::closeAsync(ResultCallback callback) {
-    // Keep a reference to ensure object is kept alive
-    ConsumerImplPtr ptr = get_shared_this_ptr();
+void ConsumerImpl::closeAsync(ResultCallback originalCallback) {
+    auto callback = [this, originalCallback](Result result) {
+        shutdown();
+        if (result == ResultOk) {
+            LOG_INFO(getName() << "Closed consumer " << consumerId_);
+        } else {
+            LOG_WARN(getName() << "Failed to close consumer: " << result);
+        }
+        if (originalCallback) {
+            originalCallback(result);
+        }
+    };
 
     if (state_ != Ready) {
-        if (callback) {
-            callback(ResultAlreadyClosed);
-        }
+        callback(ResultAlreadyClosed);
         return;
     }
 
@@ -1018,66 +1035,31 @@ void ConsumerImpl::closeAsync(ResultCallback callback) {
 
     ClientConnectionPtr cnx = getCnx().lock();
     if (!cnx) {
-        state_ = Closed;
         // If connection is gone, also the consumer is closed on the broker side
-        if (callback) {
-            callback(ResultOk);
-        }
+        callback(ResultOk);
         return;
     }
 
-    ClientImplPtr client = client_.lock();
-    if (!client) {
-        state_ = Closed;
-        // Client was already destroyed
-        if (callback) {
-            callback(ResultOk);
-        }
-        return;
-    }
+    int requestId = client_.newRequestId();
 
-    int requestId = client->newRequestId();
-    Future<Result, ResponseData> future =
-        cnx->sendRequestWithId(Commands::newCloseConsumer(consumerId_, requestId), requestId);
-    if (callback) {
-        // Pass the shared pointer "ptr" to the handler to prevent the object from being destroyed
-        future.addListener(std::bind(&ConsumerImpl::handleClose, get_shared_this_ptr(), std::placeholders::_1,
-                                     callback, ptr));
-    }
-
-    // fail pendingReceive callback
-    failPendingReceiveCallback();
-    failPendingBatchReceiveCallback();
+    auto self = get_shared_this_ptr();
+    cnx->sendRequestWithId(Commands::newCloseConsumer(consumerId_, requestId), requestId)
+        .addListener([this, self, callback](Result result, const ResponseData&) { callback(result); });
 
     // cancel timer
     batchReceiveTimer_->cancel();
 }
 
-void ConsumerImpl::handleClose(Result result, ResultCallback callback, ConsumerImplPtr consumer) {
-    if (result == ResultOk) {
-        state_ = Closed;
-
-        ClientConnectionPtr cnx = getCnx().lock();
-        if (cnx) {
-            cnx->removeConsumer(consumerId_);
-        }
-
-        LOG_INFO(getName() << "Closed consumer " << consumerId_);
-    } else {
-        LOG_ERROR(getName() << "Failed to close consumer: " << result);
-    }
-
-    if (callback) {
-        callback(result);
-    }
-}
-
 const std::string& ConsumerImpl::getName() const { return consumerStr_; }
 
 void ConsumerImpl::shutdown() {
-    state_ = Closed;
-
+    incomingMessages_.clear();
+    resetCnx();
+    client_.cleanupConsumer(this);
     consumerCreatedPromise_.setFailed(ResultAlreadyClosed);
+    failPendingReceiveCallback();
+    failPendingBatchReceiveCallback();
+    state_ = Closed;
 }
 
 bool ConsumerImpl::isClosed() { return state_ == Closed; }
@@ -1165,8 +1147,7 @@ void ConsumerImpl::getBrokerConsumerStatsAsync(BrokerConsumerStatsCallback callb
     ClientConnectionPtr cnx = getCnx().lock();
     if (cnx) {
         if (cnx->getServerProtocolVersion() >= proto::v8) {
-            ClientImplPtr client = client_.lock();
-            uint64_t requestId = client->newRequestId();
+            uint64_t requestId = client_.newRequestId();
             LOG_DEBUG(getName() << " Sending ConsumerStats Command for Consumer - " << getConsumerId()
                                 << ", requestId - " << requestId);
 
@@ -1208,12 +1189,7 @@ void ConsumerImpl::seekAsync(const MessageId& msgId, ResultCallback callback) {
         return;
     }
 
-    ClientImplPtr client = client_.lock();
-    if (!client) {
-        LOG_ERROR(getName() << "Client is expired when seekAsync " << msgId);
-        return;
-    }
-    const auto requestId = client->newRequestId();
+    const auto requestId = client_.newRequestId();
     seekAsyncInternal(requestId, Commands::newSeek(consumerId_, requestId, msgId), msgId, 0L, callback);
 }
 
@@ -1227,12 +1203,7 @@ void ConsumerImpl::seekAsync(uint64_t timestamp, ResultCallback callback) {
         return;
     }
 
-    ClientImplPtr client = client_.lock();
-    if (!client) {
-        LOG_ERROR(getName() << "Client is expired when seekAsync " << timestamp);
-        return;
-    }
-    const auto requestId = client->newRequestId();
+    const auto requestId = client_.newRequestId();
     seekAsyncInternal(requestId, Commands::newSeek(consumerId_, requestId, timestamp), MessageId::earliest(),
                       timestamp, callback);
 }
@@ -1289,7 +1260,7 @@ void ConsumerImpl::getLastMessageIdAsync(BrokerGetLastMessageIdCallback callback
         return;
     }
 
-    TimeDuration operationTimeout = seconds(client_.lock()->conf().getOperationTimeoutSeconds());
+    TimeDuration operationTimeout = seconds(client_.conf().getOperationTimeoutSeconds());
     BackoffPtr backoff = std::make_shared<Backoff>(milliseconds(100), operationTimeout * 2, milliseconds(0));
     DeadlineTimerPtr timer = executor_->createDeadlineTimer();
 
@@ -1302,8 +1273,7 @@ void ConsumerImpl::internalGetLastMessageIdAsync(const BackoffPtr& backoff, Time
     ClientConnectionPtr cnx = getCnx().lock();
     if (cnx) {
         if (cnx->getServerProtocolVersion() >= proto::v12) {
-            ClientImplPtr client = client_.lock();
-            uint64_t requestId = client->newRequestId();
+            uint64_t requestId = client_.newRequestId();
             LOG_DEBUG(getName() << " Sending getLastMessageId Command for Consumer - " << getConsumerId()
                                 << ", requestId - " << requestId);
 

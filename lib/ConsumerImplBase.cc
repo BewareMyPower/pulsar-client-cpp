@@ -32,7 +32,7 @@ DECLARE_LOG_OBJECT()
 
 namespace pulsar {
 
-ConsumerImplBase::ConsumerImplBase(ClientImplPtr client, const std::string& topic, Backoff backoff,
+ConsumerImplBase::ConsumerImplBase(ClientImpl& client, const std::string& topic, Backoff backoff,
                                    const ConsumerConfiguration& conf, ExecutorServicePtr listenerExecutor)
     : HandlerBase(client, topic, backoff),
       listenerExecutor_(listenerExecutor),

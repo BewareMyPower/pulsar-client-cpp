@@ -27,8 +27,8 @@ namespace pulsar {
 class UnAckedMessageTrackerEnabled : public UnAckedMessageTrackerInterface {
    public:
     ~UnAckedMessageTrackerEnabled();
-    UnAckedMessageTrackerEnabled(long timeoutMs, const ClientImplPtr, ConsumerImplBase&);
-    UnAckedMessageTrackerEnabled(long timeoutMs, long tickDuration, const ClientImplPtr, ConsumerImplBase&);
+    UnAckedMessageTrackerEnabled(long timeoutMs, ClientImpl&, ConsumerImplBase&);
+    UnAckedMessageTrackerEnabled(long timeoutMs, long tickDuration, ClientImpl&, ConsumerImplBase&);
     bool add(const MessageId& msgId);
     bool remove(const MessageId& msgId);
     void removeMessagesTill(const MessageId& msgId);
@@ -45,7 +45,7 @@ class UnAckedMessageTrackerEnabled : public UnAckedMessageTrackerInterface {
     std::deque<std::set<MessageId>> timePartitions;
     std::mutex lock_;
     ConsumerImplBase& consumerReference_;
-    ClientImplPtr client_;
+    ClientImpl& client_;
     DeadlineTimerPtr timer_;  // DO NOT place this before client_!
     long timeoutMs_;
     long tickDurationInMs_;

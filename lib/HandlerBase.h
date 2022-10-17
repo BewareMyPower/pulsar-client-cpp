@@ -19,7 +19,6 @@
 #ifndef _PULSAR_HANDLER_BASE_HEADER_
 #define _PULSAR_HANDLER_BASE_HEADER_
 #include "Backoff.h"
-#include "ClientImpl.h"
 #include "ClientConnection.h"
 #include <memory>
 #include <boost/asio.hpp>
@@ -36,19 +35,19 @@ class HandlerBase;
 typedef std::weak_ptr<HandlerBase> HandlerBaseWeakPtr;
 typedef std::shared_ptr<HandlerBase> HandlerBasePtr;
 
+class ClientImpl;
+
 class HandlerBase {
    public:
-    HandlerBase(const ClientImplPtr&, const std::string&, const Backoff&);
+    HandlerBase(ClientImpl&, const std::string&, const Backoff&);
 
     virtual ~HandlerBase();
 
     void start();
 
-    /*
-     * get method for derived class to access weak ptr to connection so that they
-     * have to check if they can get a shared_ptr out of it or not
-     */
-    ClientConnectionWeakPtr getCnx() const { return connection_; }
+    ClientConnectionWeakPtr getCnx() const;
+    void setCnx(const ClientConnectionPtr& cnx);
+    void resetCnx() { setCnx(nullptr); }
 
    protected:
     /*
@@ -65,10 +64,17 @@ class HandlerBase {
      * Should we retry in error that are transient
      */
     bool isRetriableError(Result result);
+
+    /**
+     * Do some cleanup work before changing `connection_` to `cnx`.
+     *
+     * @param cnx the current connection
+     */
+    virtual void beforeConnectionChange(ClientConnection& cnx) = 0;
+
     /*
      * connectionOpened will be implemented by derived class to receive notification
      */
-
     virtual void connectionOpened(const ClientConnectionPtr& connection) = 0;
 
     virtual void connectionFailed(Result result) = 0;
@@ -84,9 +90,8 @@ class HandlerBase {
     static void handleTimeout(const boost::system::error_code& ec, HandlerBasePtr handler);
 
    protected:
-    ClientImplWeakPtr client_;
+    ClientImpl& client_;
     const std::string topic_;
-    ClientConnectionWeakPtr connection_;
     ExecutorServicePtr executor_;
     mutable std::mutex mutex_;
     std::mutex pendingReceiveMutex_;
@@ -112,6 +117,9 @@ class HandlerBase {
 
    private:
     DeadlineTimerPtr timer_;
+
+    mutable std::mutex connectionMutex_;
+    ClientConnectionWeakPtr connection_;
     friend class ClientConnection;
     friend class PulsarFriend;
 };
