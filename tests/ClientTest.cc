@@ -22,6 +22,7 @@
 #include "PulsarFriend.h"
 #include "WaitUtils.h"
 
+#include <atomic>
 #include <future>
 #include <pulsar/Client.h>
 #include "../lib/checksum/ChecksumProvider.h"
@@ -198,37 +199,44 @@ TEST(ClientTest, testReferenceCount) {
         Producer producer;
         ASSERT_EQ(ResultOk, client.createProducer(topic, producer));
         ASSERT_EQ(producers.size(), 1);
-        ASSERT_TRUE(producers[0].use_count() > 0);
-        LOG_INFO("Reference count of the producer: " << producers[0].use_count());
+
+        producers.forEachValue([](const ProducerImplBaseWeakPtr &weakProducer) {
+            LOG_INFO("Reference count of producer: " << weakProducer.use_count());
+            ASSERT_FALSE(weakProducer.expired());
+        });
 
         Consumer consumer;
         ASSERT_EQ(ResultOk, client.subscribe(topic, "my-sub", consumer));
         ASSERT_EQ(consumers.size(), 1);
-        ASSERT_TRUE(consumers[0].use_count() > 0);
-        LOG_INFO("Reference count of the consumer: " << consumers[0].use_count());
 
         ReaderConfiguration readerConf;
         Reader reader;
         ASSERT_EQ(ResultOk,
                   client.createReader(topic + "-reader", MessageId::earliest(), readerConf, reader));
         ASSERT_EQ(consumers.size(), 2);
-        ASSERT_TRUE(consumers[1].use_count() > 0);
-        LOG_INFO("Reference count of the reader's underlying consumer: " << consumers[1].use_count());
+
+        consumers.forEachValue([](const ConsumerImplBaseWeakPtr &weakConsumer) {
+            LOG_INFO("Reference count of consumer: " << weakConsumer.use_count());
+            ASSERT_FALSE(weakConsumer.expired());
+        });
 
         readerWeakPtr = PulsarFriend::getReaderImplWeakPtr(reader);
-        ASSERT_TRUE(readerWeakPtr.use_count() > 0);
+        ASSERT_FALSE(readerWeakPtr.expired());
         LOG_INFO("Reference count of the reader: " << readerWeakPtr.use_count());
     }
 
     ASSERT_EQ(producers.size(), 1);
-    ASSERT_EQ(producers[0].use_count(), 0);
     ASSERT_EQ(consumers.size(), 2);
 
-    waitUntil(std::chrono::seconds(1), [&consumers, &readerWeakPtr] {
-        return consumers[0].use_count() == 0 && consumers[1].use_count() == 0 && readerWeakPtr.expired();
+    waitUntil(std::chrono::seconds(1), [&producers, &consumers, &readerWeakPtr] {
+        auto producerPairs = producers.toPairVector();
+        auto consumerPairs = consumers.toPairVector();
+        return producerPairs[0].second.expired() && consumerPairs[0].second.expired() &&
+               consumerPairs[1].second.expired() && readerWeakPtr.expired();
     });
-    EXPECT_EQ(consumers[0].use_count(), 0);
-    EXPECT_EQ(consumers[1].use_count(), 0);
+    EXPECT_EQ(producers.toPairVector()[0].second.use_count(), 0);
+    EXPECT_EQ(consumers.toPairVector()[0].second.use_count(), 0);
+    EXPECT_EQ(consumers.toPairVector()[1].second.use_count(), 0);
     EXPECT_EQ(readerWeakPtr.use_count(), 0);
     client.close();
 }
@@ -295,3 +303,87 @@ TEST(ClientTest, testMultiBrokerUrl) {
     ASSERT_EQ(ResultOk, client.createReader(topic, MessageId::earliest(), {}, reader));
     client.close();
 }
+
+enum class EndToEndType : uint8_t
+{
+    SINGLE_TOPIC,
+    MULTI_TOPICS,
+    REGEX_TOPICS
+};
+
+class ClientCloseTest : public ::testing::TestWithParam<EndToEndType> {
+   public:
+    void SetUp() override {
+        topic_ = topic_ + std::to_string(id_++) + "-" + std::to_string(time(nullptr));
+        if (GetParam() != EndToEndType::SINGLE_TOPIC) {
+            int res = makePutRequest(
+                "http://localhost:8080/admin/v2/persistent/public/default/" + topic_ + "/partitions", "2");
+            ASSERT_TRUE(res == 204 || res == 409) << "res: " << res;
+        }
+    }
+
+   protected:
+    std::string topic_ = "client-close-test-";
+    static std::atomic_int id_;
+
+    Result subscribe(Client &client, Consumer &consumer) {
+        if (GetParam() == EndToEndType::REGEX_TOPICS) {
+            // NOTE: Currently the regex subscription requires the complete namespace prefix
+            return client.subscribeWithRegex("persistent://public/default/" + topic_ + ".*", "sub", consumer);
+        } else {
+            return client.subscribe(topic_, "sub", consumer);
+        }
+    }
+};
+
+std::atomic_int ClientCloseTest::id_{0};
+
+TEST_P(ClientCloseTest, testCloseHandlers) {
+    Client client(lookupUrl);
+    auto &producers = PulsarFriend::getProducers(client);
+    Producer producer;
+    ASSERT_EQ(ResultOk, client.createProducer(topic_, producer));
+    ASSERT_EQ(producers.size(), 1);
+    ASSERT_EQ(ResultOk, producer.close());
+    ASSERT_EQ(producers.size(), 0);
+
+    auto &consumers = PulsarFriend::getConsumers(client);
+    Consumer consumer;
+    ASSERT_EQ(ResultOk, subscribe(client, consumer));
+    ASSERT_EQ(consumers.size(), 1);
+    ASSERT_EQ(ResultOk, consumer.close());
+    ASSERT_EQ(consumers.size(), 0);
+
+    ASSERT_EQ(ResultOk, subscribe(client, consumer));
+    ASSERT_EQ(consumers.size(), 1);
+    ASSERT_EQ(ResultOk, consumer.unsubscribe());
+    ASSERT_EQ(consumers.size(), 0);
+
+    ASSERT_EQ(ResultOk, client.close());
+}
+
+TEST_P(ClientCloseTest, testShutdown) {
+    Producer producer;
+    Consumer consumer;
+    {
+        Client client(lookupUrl);
+        ASSERT_EQ(ResultOk, client.createProducer(topic_, producer));
+        ASSERT_EQ(ResultOk, subscribe(client, consumer));
+        ASSERT_EQ(PulsarFriend::getProducers(client).size(), 1);
+        ASSERT_EQ(PulsarFriend::getConsumers(client).size(), 1);
+    }  // client is destructed here and `shutdown()` method will be called
+
+    EXPECT_EQ(ResultAlreadyClosed, producer.send(MessageBuilder().setContent("msg").build()));
+    EXPECT_EQ(ResultAlreadyClosed, producer.close());
+    Message msg;
+    EXPECT_EQ(ResultAlreadyClosed, consumer.receive(msg));
+    EXPECT_EQ(ResultAlreadyClosed, consumer.acknowledge(MessageId::earliest()));
+    if (GetParam() == EndToEndType::SINGLE_TOPIC) {
+        EXPECT_EQ(ResultAlreadyClosed, consumer.acknowledgeCumulative(MessageId::earliest()));
+    }
+    EXPECT_EQ(ResultAlreadyClosed, consumer.close());
+}
+
+INSTANTIATE_TEST_SUITE_P(Pulsar, ClientCloseTest,
+                         ::testing::Values(EndToEndType::SINGLE_TOPIC, EndToEndType::MULTI_TOPICS,
+                                           EndToEndType::REGEX_TOPICS));

@@ -19,7 +19,6 @@
 #ifndef _PULSAR_HANDLER_BASE_HEADER_
 #define _PULSAR_HANDLER_BASE_HEADER_
 #include "Backoff.h"
-#include "ClientImpl.h"
 #include "ClientConnection.h"
 #include <memory>
 #include <boost/asio.hpp>
@@ -36,9 +35,11 @@ class HandlerBase;
 typedef std::weak_ptr<HandlerBase> HandlerBaseWeakPtr;
 typedef std::shared_ptr<HandlerBase> HandlerBasePtr;
 
+class ClientImpl;
+
 class HandlerBase {
    public:
-    HandlerBase(const ClientImplPtr&, const std::string&, const Backoff&);
+    HandlerBase(ClientImpl&, const std::string&, const Backoff&);
 
     virtual ~HandlerBase();
 
@@ -84,7 +85,7 @@ class HandlerBase {
     static void handleTimeout(const boost::system::error_code& ec, HandlerBasePtr handler);
 
    protected:
-    ClientImplWeakPtr client_;
+    ClientImpl& client_;
     const std::string topic_;
     ClientConnectionWeakPtr connection_;
     ExecutorServicePtr executor_;

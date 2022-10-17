@@ -20,7 +20,6 @@
 #define PULSAR_MULTI_TOPICS_CONSUMER_HEADER
 #include "lib/TestUtil.h"
 #include "ConsumerImpl.h"
-#include "ClientImpl.h"
 #include "BlockingQueue.h"
 #include <vector>
 #include <queue>
@@ -37,13 +36,14 @@
 namespace pulsar {
 typedef std::shared_ptr<Promise<Result, Consumer>> ConsumerSubResultPromisePtr;
 
+class ClientImpl;
 class MultiTopicsConsumerImpl;
 class MultiTopicsConsumerImpl : public ConsumerImplBase {
    public:
-    MultiTopicsConsumerImpl(ClientImplPtr client, const std::vector<std::string>& topics,
+    MultiTopicsConsumerImpl(ClientImpl& client, const std::vector<std::string>& topics,
                             const std::string& subscriptionName, TopicNamePtr topicName,
                             const ConsumerConfiguration& conf, LookupServicePtr lookupServicePtr_);
-    MultiTopicsConsumerImpl(ClientImplPtr client, TopicNamePtr topicName, int numPartitions,
+    MultiTopicsConsumerImpl(ClientImpl& client, TopicNamePtr topicName, int numPartitions,
                             const std::string& subscriptionName, const ConsumerConfiguration& conf,
                             LookupServicePtr lookupServicePtr)
         : MultiTopicsConsumerImpl(client, {topicName->toString()}, subscriptionName, topicName, conf,
@@ -87,7 +87,7 @@ class MultiTopicsConsumerImpl : public ConsumerImplBase {
     Future<Result, Consumer> subscribeOneTopicAsync(const std::string& topic);
 
    protected:
-    const ClientImplPtr client_;
+    ClientImpl& client_;
     const std::string subscriptionName_;
     std::string consumerStr_;
     const ConsumerConfiguration conf_;

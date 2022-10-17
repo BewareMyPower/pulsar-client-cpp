@@ -17,15 +17,15 @@
  * under the License.
  */
 #include "ProducerImpl.h"
-#include "ClientImpl.h"
 #include <vector>
-
 #include <mutex>
 #include <pulsar/MessageRoutingPolicy.h>
 #include <pulsar/TopicMetadata.h>
 #include <lib/TopicName.h>
 
 namespace pulsar {
+
+class ClientImpl;
 
 class PartitionedProducerImpl : public ProducerImplBase,
                                 public std::enable_shared_from_this<PartitionedProducerImpl> {
@@ -42,7 +42,7 @@ class PartitionedProducerImpl : public ProducerImplBase,
 
     typedef std::unique_lock<std::mutex> Lock;
 
-    PartitionedProducerImpl(ClientImplPtr ptr, const TopicNamePtr topicName, const unsigned int numPartitions,
+    PartitionedProducerImpl(ClientImpl& ptr, const TopicNamePtr topicName, const unsigned int numPartitions,
                             const ProducerConfiguration& config);
     virtual ~PartitionedProducerImpl();
 
@@ -76,7 +76,7 @@ class PartitionedProducerImpl : public ProducerImplBase,
     friend class PulsarFriend;
 
    private:
-    const ClientImplPtr client_;
+    ClientImpl& client_;
 
     const TopicNamePtr topicName_;
     const std::string topic_;

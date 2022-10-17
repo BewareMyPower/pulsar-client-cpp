@@ -33,9 +33,9 @@ namespace pulsar {
 
 DECLARE_LOG_OBJECT();
 
-AckGroupingTrackerEnabled::AckGroupingTrackerEnabled(ClientImplPtr clientPtr,
-                                                     const HandlerBasePtr& handlerPtr, uint64_t consumerId,
-                                                     long ackGroupingTimeMs, long ackGroupingMaxSize)
+AckGroupingTrackerEnabled::AckGroupingTrackerEnabled(ClientImpl& client, const HandlerBasePtr& handlerPtr,
+                                                     uint64_t consumerId, long ackGroupingTimeMs,
+                                                     long ackGroupingMaxSize)
     : AckGroupingTracker(),
       handlerWeakPtr_(handlerPtr),
       consumerId_(consumerId),
@@ -46,7 +46,7 @@ AckGroupingTrackerEnabled::AckGroupingTrackerEnabled(ClientImplPtr clientPtr,
       rmutexPendingIndAcks_(),
       ackGroupingTimeMs_(ackGroupingTimeMs),
       ackGroupingMaxSize_(ackGroupingMaxSize),
-      executor_(clientPtr->getIOExecutorProvider()->get()),
+      executor_(client.getIOExecutorProvider()->get()),
       timer_(),
       mutexTimer_() {
     LOG_DEBUG("ACK grouping is enabled, grouping time " << ackGroupingTimeMs << "ms, grouping max size "

@@ -125,14 +125,20 @@ class SynchronizedHashMap {
         return pairs;
     }
 
-    // This method is only used for test
     size_t size() const noexcept {
         Lock lock(mutex_);
         return data_.size();
     }
 
+    MapType move() noexcept {
+        Lock lock(mutex_);
+        MapType data;
+        data_.swap(data);
+        return data;
+    }
+
    private:
-    std::unordered_map<K, V> data_;
+    MapType data_;
     // Use recursive_mutex to allow methods being called in `forEach`
     mutable MutexType mutex_;
 };

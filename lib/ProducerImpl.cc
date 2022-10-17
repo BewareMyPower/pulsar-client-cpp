@@ -42,8 +42,8 @@ struct ProducerImpl::PendingCallbacks {
     }
 };
 
-ProducerImpl::ProducerImpl(ClientImplPtr client, const TopicName& topicName,
-                           const ProducerConfiguration& conf, int32_t partition)
+ProducerImpl::ProducerImpl(ClientImpl& client, const TopicName& topicName, const ProducerConfiguration& conf,
+                           int32_t partition)
     : HandlerBase(
           client, (partition < 0) ? topicName.toString() : topicName.getTopicPartitionName(partition),
           Backoff(milliseconds(100), seconds(60), milliseconds(std::max(100, conf.getSendTimeout() - 100)))),
@@ -54,12 +54,12 @@ ProducerImpl::ProducerImpl(ClientImplPtr client, const TopicName& topicName,
       producerName_(conf_.getProducerName()),
       userProvidedProducerName_(false),
       producerStr_("[" + topic_ + ", " + producerName_ + "] "),
-      producerId_(client->newProducerId()),
+      producerId_(client_.newProducerId()),
       msgSequenceGenerator_(0),
       batchTimer_(executor_->getIOService()),
       sendTimer_(executor_->getIOService()),
       dataKeyRefreshTask_(executor_->getIOService(), 4 * 60 * 60 * 1000),
-      memoryLimitController_(client->getMemoryLimitController()),
+      memoryLimitController_(client_.getMemoryLimitController()),
       chunkingEnabled_(conf_.isChunkingEnabled() && topicName.isPersistent() && !conf_.getBatchingEnabled()) {
     LOG_DEBUG("ProducerName - " << producerName_ << " Created producer on topic " << topic_
                                 << " id: " << producerId_);
@@ -76,7 +76,7 @@ ProducerImpl::ProducerImpl(ClientImplPtr client, const TopicName& topicName,
         semaphore_ = std::unique_ptr<Semaphore>(new Semaphore(conf_.getMaxPendingMessages()));
     }
 
-    unsigned int statsIntervalInSeconds = client->getClientConfig().getStatsIntervalInSeconds();
+    unsigned int statsIntervalInSeconds = client_.getClientConfig().getStatsIntervalInSeconds();
     if (statsIntervalInSeconds) {
         producerStatsBasePtr_ =
             std::make_shared<ProducerStatsImpl>(producerStr_, executor_, statsIntervalInSeconds);
@@ -130,8 +130,7 @@ void ProducerImpl::connectionOpened(const ClientConnectionPtr& cnx) {
         return;
     }
 
-    ClientImplPtr client = client_.lock();
-    int requestId = client->newRequestId();
+    int requestId = client_.newRequestId();
 
     SharedBuffer cmd = Commands::newProducer(
         topic_, producerId_, producerName_, requestId, conf_.getProperties(), conf_.getSchema(), epoch_,
@@ -151,6 +150,7 @@ void ProducerImpl::connectionFailed(Result result) {
         // so don't change the state and allow reconnections
         return;
     } else if (producerCreatedPromise_.setFailed(result)) {
+        shutdown();
         state_ = Failed;
     }
 }
@@ -219,8 +219,7 @@ void ProducerImpl::handleCreateProducer(const ClientConnectionPtr& cnx, Result r
             // Creating the producer has timed out. We need to ensure the broker closes the producer
             // in case it was indeed created, otherwise it might prevent new create producer operation,
             // since we are not closing the connection
-            int requestId = client_.lock()->newRequestId();
-            cnx->sendRequestWithId(Commands::newCloseProducer(producerId_, requestId), requestId);
+            closeAsync(nullptr);
         }
 
         if (producerCreatedPromise_.isComplete()) {
@@ -243,6 +242,7 @@ void ProducerImpl::handleCreateProducer(const ClientConnectionPtr& cnx, Result r
                 LOG_ERROR(getName() << "Failed to create producer: " << strResult(result));
                 failPendingMessages(result, true);
                 producerCreatedPromise_.setFailed(result);
+                shutdown();
                 state_ = Failed;
             }
         }
@@ -645,16 +645,25 @@ void ProducerImpl::printStats() {
     }
 }
 
-void ProducerImpl::closeAsync(CloseCallback callback) {
+void ProducerImpl::closeAsync(CloseCallback originalCallback) {
+    auto callback = [this, originalCallback](Result result) {
+        if (result == ResultOk) {
+            LOG_INFO(getName() << "Closed producer " << producerId_);
+            shutdown();
+        } else {
+            LOG_ERROR(getName() << "Failed to close producer: " << strResult(result));
+        }
+        if (originalCallback) {
+            originalCallback(result);
+        }
+    };
+
     // if the producer was never started then there is nothing to clean up
     State expectedState = NotStarted;
     if (state_.compare_exchange_strong(expectedState, Closed)) {
         callback(ResultOk);
         return;
     }
-
-    // Keep a reference to ensure object is kept alive
-    ProducerImplPtr ptr = shared_from_this();
 
     cancelTimers();
 
@@ -670,10 +679,7 @@ void ProducerImpl::closeAsync(CloseCallback callback) {
     const auto state = state_.load();
     if (state != Ready && state != Pending) {
         state_ = Closed;
-        if (callback) {
-            callback(ResultAlreadyClosed);
-        }
-
+        callback(ResultAlreadyClosed);
         return;
     }
     LOG_INFO(getName() << "Closing producer for topic " << topic_);
@@ -681,11 +687,7 @@ void ProducerImpl::closeAsync(CloseCallback callback) {
 
     ClientConnectionPtr cnx = getCnx().lock();
     if (!cnx) {
-        state_ = Closed;
-
-        if (callback) {
-            callback(ResultOk);
-        }
+        callback(ResultOk);
         return;
     }
 
@@ -693,41 +695,10 @@ void ProducerImpl::closeAsync(CloseCallback callback) {
     // message from the producer
     connection_.reset();
 
-    ClientImplPtr client = client_.lock();
-    if (!client) {
-        state_ = Closed;
-        // Client was already destroyed
-        if (callback) {
-            callback(ResultOk);
-        }
-        return;
-    }
-
-    int requestId = client->newRequestId();
-    Future<Result, ResponseData> future =
-        cnx->sendRequestWithId(Commands::newCloseProducer(producerId_, requestId), requestId);
-    if (callback) {
-        // Pass the shared pointer "ptr" to the handler to prevent the object from being destroyed
-        future.addListener(
-            std::bind(&ProducerImpl::handleClose, shared_from_this(), std::placeholders::_1, callback, ptr));
-    }
-}
-
-void ProducerImpl::handleClose(Result result, ResultCallback callback, ProducerImplPtr producer) {
-    if (result == ResultOk) {
-        state_ = Closed;
-        LOG_INFO(getName() << "Closed producer " << producerId_);
-        ClientConnectionPtr cnx = getCnx().lock();
-        if (cnx) {
-            cnx->removeProducer(producerId_);
-        }
-    } else {
-        LOG_ERROR(getName() << "Failed to close producer: " << strResult(result));
-    }
-
-    if (callback) {
-        callback(result);
-    }
+    auto self = shared_from_this();
+    int requestId = client_.newRequestId();
+    cnx->sendRequestWithId(Commands::newCloseProducer(producerId_, requestId), requestId)
+        .addListener([self, callback](Result result, const ResponseData&) { callback(result); });
 }
 
 Future<Result, ProducerImplBaseWeakPtr> ProducerImpl::getProducerCreatedFuture() {
@@ -885,16 +856,21 @@ void ProducerImpl::start() {
 }
 
 void ProducerImpl::shutdown() {
-    Lock lock(mutex_);
-    state_ = Closed;
+    auto cnx = getCnx().lock();
+    if (cnx) {
+        cnx->removeProducer(producerId_);
+    }
+    client_.cleanupProducer(this);
     cancelTimers();
     producerCreatedPromise_.setFailed(ResultAlreadyClosed);
+    state_ = Closed;
 }
 
 void ProducerImpl::cancelTimers() {
     dataKeyRefreshTask_.stop();
-    batchTimer_.cancel();
-    sendTimer_.cancel();
+    boost::system::error_code ec;
+    batchTimer_.cancel(ec);
+    sendTimer_.cancel(ec);
 }
 
 bool ProducerImplCmp::operator()(const ProducerImplPtr& a, const ProducerImplPtr& b) const {

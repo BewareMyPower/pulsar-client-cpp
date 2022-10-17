@@ -19,7 +19,6 @@
 #ifndef PULSAR_PATTERN_MULTI_TOPICS_CONSUMER_HEADER
 #define PULSAR_PATTERN_MULTI_TOPICS_CONSUMER_HEADER
 #include "ConsumerImpl.h"
-#include "ClientImpl.h"
 #include <lib/TopicName.h>
 #include <lib/NamespaceName.h>
 #include "MultiTopicsConsumerImpl.h"
@@ -35,6 +34,7 @@
 
 namespace pulsar {
 
+class ClientImpl;
 class PatternMultiTopicsConsumerImpl;
 
 class PatternMultiTopicsConsumerImpl : public MultiTopicsConsumerImpl {
@@ -43,7 +43,7 @@ class PatternMultiTopicsConsumerImpl : public MultiTopicsConsumerImpl {
     // which only contains after namespace part.
     // when subscribe, client will first get all topics that match given pattern.
     // `topics` contains the topics that match `patternString`.
-    PatternMultiTopicsConsumerImpl(ClientImplPtr client, const std::string patternString,
+    PatternMultiTopicsConsumerImpl(ClientImpl& client, const std::string patternString,
                                    const std::vector<std::string>& topics,
                                    const std::string& subscriptionName, const ConsumerConfiguration& conf,
                                    const LookupServicePtr lookupServicePtr_);

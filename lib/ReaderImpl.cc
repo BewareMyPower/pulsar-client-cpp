@@ -31,7 +31,7 @@ ConsumerConfiguration consumerConfigOfReader;
 
 static ResultCallback emptyCallback;
 
-ReaderImpl::ReaderImpl(const ClientImplPtr client, const std::string& topic, const ReaderConfiguration& conf,
+ReaderImpl::ReaderImpl(ClientImpl& client, const std::string& topic, const ReaderConfiguration& conf,
                        const ExecutorServicePtr listenerExecutor, ReaderCallback readerCreatedCallback)
     : topic_(topic), client_(client), readerConf_(conf), readerCreatedCallback_(readerCreatedCallback) {}
 
@@ -76,7 +76,7 @@ void ReaderImpl::start(const MessageId& startMessageId,
         test::consumerConfigOfReader = consumerConf.clone();
     }
 
-    consumer_ = std::make_shared<ConsumerImpl>(client_.lock(), topic_, subscription, consumerConf,
+    consumer_ = std::make_shared<ConsumerImpl>(client_, topic_, subscription, consumerConf,
                                                TopicName::get(topic_)->isPersistent(), ExecutorServicePtr(),
                                                false, NonPartitioned, Commands::SubscriptionModeNonDurable,
                                                Optional<MessageId>::of(startMessageId));

@@ -26,7 +26,7 @@ namespace pulsar {
 
 void UnAckedMessageTrackerEnabled::timeoutHandler() {
     timeoutHandlerHelper();
-    ExecutorServicePtr executorService = client_->getIOExecutorProvider()->get();
+    ExecutorServicePtr executorService = client_.getIOExecutorProvider()->get();
     timer_ = executorService->createDeadlineTimer();
     timer_->expires_from_now(boost::posix_time::milliseconds(tickDurationInMs_));
     timer_->async_wait([&](const boost::system::error_code& ec) {
@@ -67,13 +67,12 @@ void UnAckedMessageTrackerEnabled::timeoutHandlerHelper() {
     }
 }
 
-UnAckedMessageTrackerEnabled::UnAckedMessageTrackerEnabled(long timeoutMs, const ClientImplPtr client,
+UnAckedMessageTrackerEnabled::UnAckedMessageTrackerEnabled(long timeoutMs, ClientImpl& client,
                                                            ConsumerImplBase& consumer)
     : UnAckedMessageTrackerEnabled(timeoutMs, timeoutMs, client, consumer) {}
 
 UnAckedMessageTrackerEnabled::UnAckedMessageTrackerEnabled(long timeoutMs, long tickDurationInMs,
-                                                           const ClientImplPtr client,
-                                                           ConsumerImplBase& consumer)
+                                                           ClientImpl& client, ConsumerImplBase& consumer)
     : consumerReference_(consumer),
       client_(client),
       timeoutMs_(timeoutMs),

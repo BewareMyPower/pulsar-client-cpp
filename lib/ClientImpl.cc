@@ -170,10 +170,10 @@ void ClientImpl::handleCreateProducer(const Result result, const LookupDataResul
     if (!result) {
         ProducerImplBasePtr producer;
         if (partitionMetadata->getPartitions() > 0) {
-            producer = std::make_shared<PartitionedProducerImpl>(shared_from_this(), topicName,
+            producer = std::make_shared<PartitionedProducerImpl>(*this, topicName,
                                                                  partitionMetadata->getPartitions(), conf);
         } else {
-            producer = std::make_shared<ProducerImpl>(shared_from_this(), *topicName, conf);
+            producer = std::make_shared<ProducerImpl>(*this, *topicName, conf);
         }
         producer->getProducerCreatedFuture().addListener(
             std::bind(&ClientImpl::handleProducerCreated, shared_from_this(), std::placeholders::_1,
@@ -189,9 +189,15 @@ void ClientImpl::handleCreateProducer(const Result result, const LookupDataResul
 void ClientImpl::handleProducerCreated(Result result, ProducerImplBaseWeakPtr producerBaseWeakPtr,
                                        CreateProducerCallback callback, ProducerImplBasePtr producer) {
     if (result == ResultOk) {
-        Lock lock(mutex_);
-        producers_.push_back(producer);
-        lock.unlock();
+        auto pair = producers_.emplace(producer.get(), producer);
+        if (!pair.second) {
+            auto existingProducer = pair.first->second.lock();
+            LOG_ERROR("Unexpected existing producer at the same address: "
+                      << pair.first->first << ", producer: "
+                      << (existingProducer ? existingProducer->getProducerName() : "(null)"));
+            callback(ResultUnknownError, {});
+            return;
+        }
         callback(result, Producer(producer));
     } else {
         callback(result, {});
@@ -236,14 +242,23 @@ void ClientImpl::handleReaderMetadataLookup(const Result result, const LookupDat
         return;
     }
 
-    ReaderImplPtr reader = std::make_shared<ReaderImpl>(shared_from_this(), topicName->toString(), conf,
+    ReaderImplPtr reader = std::make_shared<ReaderImpl>(*this, topicName->toString(), conf,
                                                         getListenerExecutorProvider()->get(), callback);
     ConsumerImplBasePtr consumer = reader->getConsumer().lock();
     auto self = shared_from_this();
     reader->start(startMessageId, [this, self](const ConsumerImplBaseWeakPtr& weakConsumerPtr) {
-        Lock lock(mutex_);
-        consumers_.push_back(weakConsumerPtr);
-        lock.unlock();
+        auto consumer = weakConsumerPtr.lock();
+        if (consumer) {
+            auto pair = consumers_.emplace(consumer.get(), consumer);
+            if (!pair.second) {
+                auto existingConsumer = pair.first->second.lock();
+                LOG_ERROR("Unexpected existing consumer at the same address: "
+                          << pair.first->first
+                          << ", consumer: " << (existingConsumer ? existingConsumer->getName() : "(null)"));
+            }
+        } else {
+            LOG_ERROR("Unexpected case: the consumer is somehow expired");
+        }
     });
 }
 
@@ -286,7 +301,7 @@ void ClientImpl::createPatternMultiTopicsConsumer(const Result result, const Nam
             PatternMultiTopicsConsumerImpl::topicsPatternFilter(*topics, pattern);
 
         consumer = std::make_shared<PatternMultiTopicsConsumerImpl>(
-            shared_from_this(), regexPattern, *matchTopics, subscriptionName, conf, lookupServicePtr_);
+            *this, regexPattern, *matchTopics, subscriptionName, conf, lookupServicePtr_);
 
         consumer->getConsumerCreatedFuture().addListener(
             std::bind(&ClientImpl::handleConsumerCreated, shared_from_this(), std::placeholders::_1,
@@ -324,7 +339,7 @@ void ClientImpl::subscribeAsync(const std::vector<std::string>& topics, const st
     }
 
     ConsumerImplBasePtr consumer = std::make_shared<MultiTopicsConsumerImpl>(
-        shared_from_this(), topics, subscriptionName, topicNamePtr, conf, lookupServicePtr_);
+        *this, topics, subscriptionName, topicNamePtr, conf, lookupServicePtr_);
 
     consumer->getConsumerCreatedFuture().addListener(std::bind(&ClientImpl::handleConsumerCreated,
                                                                shared_from_this(), std::placeholders::_1,
@@ -374,12 +389,12 @@ void ClientImpl::handleSubscribe(const Result result, const LookupDataResultPtr 
                 callback(ResultInvalidConfiguration, Consumer());
                 return;
             }
-            consumer = std::make_shared<MultiTopicsConsumerImpl>(shared_from_this(), topicName,
+            consumer = std::make_shared<MultiTopicsConsumerImpl>(*this, topicName,
                                                                  partitionMetadata->getPartitions(),
                                                                  subscriptionName, conf, lookupServicePtr_);
         } else {
-            auto consumerImpl = std::make_shared<ConsumerImpl>(
-                shared_from_this(), topicName->toString(), subscriptionName, conf, topicName->isPersistent());
+            auto consumerImpl = std::make_shared<ConsumerImpl>(*this, topicName->toString(), subscriptionName,
+                                                               conf, topicName->isPersistent());
             consumerImpl->setPartitionIndex(topicName->getPartitionIndex());
             consumer = consumerImpl;
         }
@@ -397,9 +412,15 @@ void ClientImpl::handleSubscribe(const Result result, const LookupDataResultPtr 
 void ClientImpl::handleConsumerCreated(Result result, ConsumerImplBaseWeakPtr consumerImplBaseWeakPtr,
                                        SubscribeCallback callback, ConsumerImplBasePtr consumer) {
     if (result == ResultOk) {
-        Lock lock(mutex_);
-        consumers_.push_back(consumer);
-        lock.unlock();
+        auto pair = consumers_.emplace(consumer.get(), consumer);
+        if (!pair.second) {
+            auto existingConsumer = pair.first->second.lock();
+            LOG_ERROR("Unexpected existing consumer at the same address: "
+                      << pair.first->first
+                      << ", consumer: " << (existingConsumer ? existingConsumer->getName() : "(null)"));
+            callback(ResultUnknownError, {});
+            return;
+        }
         callback(result, Consumer(consumer));
     } else {
         callback(result, {});
@@ -478,12 +499,11 @@ void ClientImpl::getPartitionsForTopicAsync(const std::string& topic, GetPartiti
 
 void ClientImpl::closeAsync(CloseCallback callback) {
     Lock lock(mutex_);
-    ProducersList producers(producers_);
-    ConsumersList consumers(consumers_);
-
-    if (state_ != Open && callback) {
+    if (state_ != Open) {
         lock.unlock();
-        callback(ResultAlreadyClosed);
+        if (callback) {
+            callback(ResultAlreadyClosed);
+        }
         return;
     }
     // Set the state to Closing so that no producers could get added
@@ -492,12 +512,15 @@ void ClientImpl::closeAsync(CloseCallback callback) {
 
     memoryLimitController_.close();
 
+    auto producers{producers_.move()};
+    auto consumers{consumers_.move()};
+
     SharedInt numberOfOpenHandlers = std::make_shared<int>(producers.size() + consumers.size());
     LOG_INFO("Closing Pulsar client with " << producers.size() << " producers and " << consumers.size()
                                            << " consumers");
 
-    for (ProducersList::iterator it = producers.begin(); it != producers.end(); ++it) {
-        ProducerImplBasePtr producer = it->lock();
+    for (auto&& kv : producers) {
+        ProducerImplBasePtr producer = kv.second.lock();
         if (producer && !producer->isClosed()) {
             producer->closeAsync(std::bind(&ClientImpl::handleClose, shared_from_this(),
                                            std::placeholders::_1, numberOfOpenHandlers, callback));
@@ -507,8 +530,8 @@ void ClientImpl::closeAsync(CloseCallback callback) {
         }
     }
 
-    for (ConsumersList::iterator it = consumers.begin(); it != consumers.end(); ++it) {
-        ConsumerImplBasePtr consumer = it->lock();
+    for (auto&& kv : consumers) {
+        ConsumerImplBasePtr consumer = kv.second.lock();
         if (consumer && !consumer->isClosed()) {
             consumer->closeAsync(std::bind(&ClientImpl::handleClose, shared_from_this(),
                                            std::placeholders::_1, numberOfOpenHandlers, callback));
@@ -562,23 +585,18 @@ void ClientImpl::handleClose(Result result, SharedInt numberOfOpenHandlers, Resu
 }
 
 void ClientImpl::shutdown() {
-    Lock lock(mutex_);
-    ProducersList producers;
-    ConsumersList consumers;
+    auto producers{producers_.move()};
+    auto consumers{consumers_.move()};
 
-    producers.swap(producers_);
-    consumers.swap(consumers_);
-    lock.unlock();
-
-    for (ProducersList::iterator it = producers.begin(); it != producers.end(); ++it) {
-        ProducerImplBasePtr producer = it->lock();
+    for (auto&& kv : producers) {
+        ProducerImplBasePtr producer = kv.second.lock();
         if (producer) {
             producer->shutdown();
         }
     }
 
-    for (ConsumersList::iterator it = consumers.begin(); it != consumers.end(); ++it) {
-        ConsumerImplBasePtr consumer = it->lock();
+    for (auto&& kv : consumers) {
+        ConsumerImplBasePtr consumer = kv.second.lock();
         if (consumer) {
             consumer->shutdown();
         }
@@ -631,26 +649,24 @@ uint64_t ClientImpl::newRequestId() {
 }
 
 uint64_t ClientImpl::getNumberOfProducers() {
-    Lock lock(mutex_);
     uint64_t numberOfAliveProducers = 0;
-    for (const auto& producer : producers_) {
+    producers_.forEachValue([&numberOfAliveProducers](const ProducerImplBaseWeakPtr& producer) {
         const auto& producerImpl = producer.lock();
         if (producerImpl) {
             numberOfAliveProducers += producerImpl->getNumberOfConnectedProducer();
         }
-    }
+    });
     return numberOfAliveProducers;
 }
 
 uint64_t ClientImpl::getNumberOfConsumers() {
-    Lock lock(mutex_);
     uint64_t numberOfAliveConsumers = 0;
-    for (const auto& consumer : consumers_) {
+    consumers_.forEachValue([&numberOfAliveConsumers](const ConsumerImplBaseWeakPtr& consumer) {
         const auto consumerImpl = consumer.lock();
         if (consumerImpl) {
             numberOfAliveConsumers += consumerImpl->getNumberOfConnectedConsumer();
         }
-    }
+    });
     return numberOfAliveConsumers;
 }
 

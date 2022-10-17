@@ -98,11 +98,11 @@ class PulsarFriend {
 
     static std::shared_ptr<ClientImpl> getClientImplPtr(Client client) { return client.impl_; }
 
-    static ClientImpl::ProducersList& getProducers(const Client& client) {
+    static auto getProducers(const Client& client) -> decltype(ClientImpl::producers_)& {
         return getClientImplPtr(client)->producers_;
     }
 
-    static ClientImpl::ConsumersList& getConsumers(const Client& client) {
+    static auto getConsumers(const Client& client) -> decltype(ClientImpl::consumers_)& {
         return getClientImplPtr(client)->consumers_;
     }
 
