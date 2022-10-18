@@ -111,9 +111,9 @@ void MultiTopicsConsumerImpl::handleOneTopicSubscribed(Result result, Consumer c
         } else {
             LOG_ERROR("Unable to create Consumer - " << consumerStr_ << " Error - " << result);
             // unsubscribed all of the successfully subscribed partitioned consumers
-            // It's safe to capture only this here, because the callback can be called only when this is valid
-            closeAsync(
-                [this](Result result) { multiTopicsConsumerCreatedPromise_.setFailed(failedResult.load()); });
+            // `shutdown()`, which set multiTopicsConsumerCreatedPromise_ with `failedResult`, will be called
+            // when `closeAsync` completes.
+            closeAsync(nullptr);
         }
     }
 }
@@ -434,8 +434,6 @@ void MultiTopicsConsumerImpl::closeAsync(ResultCallback originalCallback) {
                 }
                 // closed all consumers
                 if (numConsumersLeft == 0) {
-                    incomingMessages_.clear();
-                    topicsPartitions_.clear();
                     callback(result);
                 }
             });
@@ -630,11 +628,17 @@ void MultiTopicsConsumerImpl::shutdown() {
         boost::system::error_code ec;
         partitionsUpdateTimer_->cancel(ec);
     }
+    incomingMessages_.clear();
+    topicsPartitions_.clear();
     unAckedMessageTrackerPtr_->clear();
     client_.cleanupConsumer(this);
     consumers_.clear();
     topicsPartitions_.clear();
-    multiTopicsConsumerCreatedPromise_.setFailed(ResultAlreadyClosed);
+    if (failedResult != ResultOk) {
+        multiTopicsConsumerCreatedPromise_.setFailed(failedResult);
+    } else {
+        multiTopicsConsumerCreatedPromise_.setFailed(ResultAlreadyClosed);
+    }
     state_ = Closed;
 }
 

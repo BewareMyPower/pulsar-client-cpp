@@ -18,6 +18,7 @@
  */
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <unordered_map>
@@ -68,6 +69,9 @@ class SynchronizedHashMap {
     }
 
     void clear() {
+        if (inLoop_) {
+            return;
+        }
         Lock lock(mutex_);
         data_.clear();
     }
@@ -75,12 +79,14 @@ class SynchronizedHashMap {
     // clear the map and apply `f` on each removed value
     void clear(std::function<void(const K&, const V&)> f) {
         Lock lock(mutex_);
+        inLoop_ = true;
         auto it = data_.begin();
         while (it != data_.end()) {
             f(it->first, it->second);
             auto next = data_.erase(it);
             it = next;
         }
+        inLoop_ = false;
     }
 
     OptValue find(const K& key) const {
@@ -139,6 +145,7 @@ class SynchronizedHashMap {
 
    private:
     MapType data_;
+    std::atomic_bool inLoop_{false};
     // Use recursive_mutex to allow methods being called in `forEach`
     mutable MutexType mutex_;
 };
