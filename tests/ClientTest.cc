@@ -378,9 +378,6 @@ TEST_P(ClientCloseTest, testShutdown) {
     Message msg;
     EXPECT_EQ(ResultAlreadyClosed, consumer.receive(msg));
     EXPECT_EQ(ResultAlreadyClosed, consumer.acknowledge(MessageId::earliest()));
-    if (GetParam() == EndToEndType::SINGLE_TOPIC) {
-        EXPECT_EQ(ResultAlreadyClosed, consumer.acknowledgeCumulative(MessageId::earliest()));
-    }
     EXPECT_EQ(ResultAlreadyClosed, consumer.close());
 }
 
