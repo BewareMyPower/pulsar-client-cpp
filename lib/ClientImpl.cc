@@ -512,8 +512,8 @@ void ClientImpl::closeAsync(CloseCallback callback) {
 
     memoryLimitController_.close();
 
-    auto producers{producers_.move()};
-    auto consumers{consumers_.move()};
+    auto producers = producers_.move();
+    auto consumers = consumers_.move();
 
     SharedInt numberOfOpenHandlers = std::make_shared<int>(producers.size() + consumers.size());
     LOG_INFO("Closing Pulsar client with " << producers.size() << " producers and " << consumers.size()
@@ -585,8 +585,8 @@ void ClientImpl::handleClose(Result result, SharedInt numberOfOpenHandlers, Resu
 }
 
 void ClientImpl::shutdown() {
-    auto producers{producers_.move()};
-    auto consumers{consumers_.move()};
+    auto producers = producers_.move();
+    auto consumers = consumers_.move();
 
     for (auto&& kv : producers) {
         ProducerImplBasePtr producer = kv.second.lock();
