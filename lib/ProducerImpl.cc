@@ -174,7 +174,9 @@ void ProducerImpl::handleCreateProducer(const ClientConnectionPtr& cnx, Result r
         // set the cnx pointer so that new messages will be sent immediately
         LOG_INFO(getName() << "Created producer on broker " << cnx->cnxString());
 
-        cnx->registerProducer(producerId_, shared_from_this());
+        std::weak_ptr<ProducerImpl> self = shared_from_this();
+        cnx->registerProducer(producerId_, self);
+        LOG_INFO("XYZ registerProducer " << producerId_ << " " << this << " refcnt: " << self.use_count());
         producerName_ = responseData.producerName;
         schemaVersion_ = responseData.schemaVersion;
         producerStr_ = "[" + topic_ + ", " + producerName_ + "] ";
@@ -185,6 +187,10 @@ void ProducerImpl::handleCreateProducer(const ClientConnectionPtr& cnx, Result r
             msgSequenceGenerator_ = lastSequenceIdPublished_ + 1;
         }
         resendMessages(cnx);
+        auto previousCnx = getCnx().lock();
+        if (previousCnx) {
+            previousCnx->removeProducer(producerId_);
+        }
         connection_ = cnx;
         state_ = Ready;
         backoff_.reset();
@@ -693,6 +699,7 @@ void ProducerImpl::closeAsync(CloseCallback originalCallback) {
 
     // Detach the producer from the connection to avoid sending any other
     // message from the producer
+    cnx->removeProducer(producerId_);
     connection_.reset();
 
     auto self = shared_from_this();
@@ -839,9 +846,11 @@ bool ProducerImpl::encryptMessage(proto::MessageMetadata& metadata, SharedBuffer
 
 void ProducerImpl::disconnectProducer() {
     LOG_DEBUG("Broker notification of Closed producer: " << producerId_);
-    Lock lock(mutex_);
+    auto cnx = getCnx().lock();
+    if (cnx) {
+        cnx->removeProducer(producerId_);
+    } 
     connection_.reset();
-    lock.unlock();
     scheduleReconnection(shared_from_this());
 }
 
@@ -859,6 +868,10 @@ void ProducerImpl::shutdown() {
     auto cnx = getCnx().lock();
     if (cnx) {
         cnx->removeProducer(producerId_);
+        LOG_INFO("XYZ remove " << producerId_ << " from cnx"
+                               << " " << this);
+    } else {
+        LOG_INFO("XYZ ProducerImpl " << this << " cnx is no longer valid")
     }
     client_.cleanupProducer(this);
     cancelTimers();
