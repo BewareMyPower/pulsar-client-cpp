@@ -1616,14 +1616,14 @@ Future<Result, ClientConnectionWeakPtr> ClientConnection::getConnectFuture() {
     return connectPromise_.getFuture();
 }
 
-void ClientConnection::registerProducer(int producerId, ProducerImplPtr producer) {
+void ClientConnection::registerProducer(int producerId, ProducerImplWeakPtr producer) {
     Lock lock(mutex_);
-    producers_.insert(std::make_pair(producerId, producer));
+    producers_.emplace(producerId, producer);
 }
 
-void ClientConnection::registerConsumer(int consumerId, ConsumerImplPtr consumer) {
+void ClientConnection::registerConsumer(int consumerId, ConsumerImplWeakPtr consumer) {
     Lock lock(mutex_);
-    consumers_.insert(std::make_pair(consumerId, consumer));
+    consumers_.emplace(consumerId, consumer);
 }
 
 void ClientConnection::removeProducer(int producerId) {

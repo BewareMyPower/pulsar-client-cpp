@@ -134,8 +134,8 @@ class PULSAR_PUBLIC ClientConnection : public std::enable_shared_from_this<Clien
     void sendMessage(const OpSendMsg& opSend);
     void sendMessageInternal(const OpSendMsg& opSend);
 
-    void registerProducer(int producerId, ProducerImplPtr producer);
-    void registerConsumer(int consumerId, ConsumerImplPtr consumer);
+    void registerProducer(int producerId, ProducerImplWeakPtr producer);
+    void registerConsumer(int consumerId, ConsumerImplWeakPtr consumer);
 
     void removeProducer(int producerId);
     void removeConsumer(int consumerId);
