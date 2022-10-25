@@ -124,6 +124,7 @@ jobs:
               -G "${{ matrix.generator }}" ${{ matrix.arch }} \
               -DBUILD_TESTS=OFF \
               -DVCPKG_TRIPLET="${{ matrix.triplet }}-static" \
+              -DCMAKE_INSTALL_PATH="${{ env.INSTALL_DIR }}" \
               -S .
           fi
 
