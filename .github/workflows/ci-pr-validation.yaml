@@ -68,9 +68,8 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
-          cp -rf ./include "${{ env.INSTALL_DIR }}/include"
-          ls ${{ env.INSTALL_DIR }}
-          ls ${{ env.INSTALL_DIR }}/include
+          cp -rf ./include ${{ env.INSTALL_DIR }}
+          ls -l ${{ env.INSTALL_DIR }}
 
       - name: Zip artifact
         shell: bash
