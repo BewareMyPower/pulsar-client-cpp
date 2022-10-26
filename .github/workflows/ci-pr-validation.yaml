@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
-      INSTALL_DIR: C:/pulsar-cpp
+      INSTALL_DIR: 'C:\pulsar-cpp'
     strategy:
       fail-fast: false
       matrix:
