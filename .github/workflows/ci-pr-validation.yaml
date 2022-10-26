@@ -87,30 +87,6 @@ jobs:
         run: rm -rf "$VCPKG_INSTALLATION_ROOT"
         shell: bash
 
-      - name: Install vcpkg packages
-        run: |
-          ${{ env.VCPKG_ROOT }}\vcpkg.exe install --triplet ${{ matrix.triplet }}
-
-      - name: Configure (default)
-
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cmake \
-              -B ./build-0 \
-              -G "${{ matrix.generator }}" ${{ matrix.arch }} \
-              -DBUILD_TESTS=OFF \
-              -DVCPKG_TRIPLET=${{ matrix.triplet }} \
-              -S .
-          fi
-
-      - name: Compile
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cmake --build ./build-0 --parallel --config Release
-          fi
-
       - name: Install static vcpkg packages
         run: |
           ${{ env.VCPKG_ROOT }}\vcpkg.exe install --triplet "${{ matrix.triplet }}-static"
