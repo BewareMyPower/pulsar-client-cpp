@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
-      INSTALL_DIR: 'C:\pulsar-cpp'
+      INSTALL_DIR: 'C:\\pulsar-cpp'
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +68,8 @@ jobs:
       - name: Build and package
         shell: bash
         run: |
-          cp -rf ./include ${{ env.INSTALL_DIR }}
+          mkdir -p ${{ env.INSTALL_DIR }}
+          cp -r ./include ${{ env.INSTALL_DIR }}
           ls -l ${{ env.INSTALL_DIR }}
 
       - name: Zip artifact
