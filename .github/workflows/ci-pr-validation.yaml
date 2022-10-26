@@ -65,21 +65,13 @@ jobs:
           key: |
             ${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles( 'vcpkg.json' ) }}
 
-      - name: Get vcpkg(windows)
-        if: ${{ runner.os == 'Windows' && steps.vcpkg-cache.outputs.cache-hit != 'true' }}
-        run: |
-          cd ${{ github.workspace }}
-          mkdir build -force
-          git clone https://github.com/Microsoft/vcpkg.git
-          cd vcpkg
-          .\bootstrap-vcpkg.bat
-
       - name: Build and package
         shell: bash
         run: |
-          cp -rf ./include ${{ env.INSTALL_DIR }}
+          cp -rf ./include "${{ env.INSTALL_DIR }}/include"
           ls ${{ env.INSTALL_DIR }}
+          ls ${{ env.INSTALL_DIR }}/include
 
       - name: Zip artifact
         shell: bash
-        run: 7z a -tzip Windows-${{ matrix.triplet }}.zip "${{ env.INSTALL_DIR }}\*"
+        run: 7z a -tzip Windows-${{ matrix.triplet }}.zip ${{ env.INSTALL_DIR }}
