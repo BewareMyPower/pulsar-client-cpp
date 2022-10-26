@@ -74,7 +74,7 @@ jobs:
 
       - name: Zip artifact
         shell: bash
-        run: 7z a -tzip Windows-${{ matrix.triplet }}.zip ${{ env.INSTALL_DIR }}
+        run: 7z a -tzip Windows-${{ matrix.triplet }}.zip ${{ env.INSTALL_DIR }}/*
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
