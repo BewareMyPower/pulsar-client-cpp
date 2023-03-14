@@ -1201,11 +1201,17 @@ void ClientConnection::close(Result result) {
     }
 
     for (ProducersMap::iterator it = producers.begin(); it != producers.end(); ++it) {
-        HandlerBase::handleDisconnection(result, shared_from_this(), it->second);
+        auto handler = it->second.lock();
+        if (handler) {
+            handler->disconnect(this);
+        }
     }
 
     for (ConsumersMap::iterator it = consumers.begin(); it != consumers.end(); ++it) {
-        HandlerBase::handleDisconnection(result, shared_from_this(), it->second);
+        auto handler = it->second.lock();
+        if (handler) {
+            handler->disconnect(this);
+        }
     }
 
     connectPromise_.setFailed(result);

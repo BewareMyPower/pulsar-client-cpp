@@ -89,9 +89,6 @@ ClientImpl::ClientImpl(const std::string& serviceUrl, const ClientConfiguration&
       partitionListenerExecutorProvider_(
           std::make_shared<ExecutorServiceProvider>(clientConfiguration_.getMessageListenerThreads())),
       pool_(clientConfiguration_, ioExecutorProvider_, clientConfiguration_.getAuthPtr(), poolConnections),
-      producerIdGenerator_(0),
-      consumerIdGenerator_(0),
-      requestIdGenerator_(0),
       closingError(ResultOk) {
     std::unique_ptr<LoggerFactory> loggerFactory = clientConfiguration_.impl_->takeLogger();
     if (!loggerFactory) {
@@ -696,18 +693,11 @@ void ClientImpl::shutdown() {
 }
 
 uint64_t ClientImpl::newProducerId() {
-    Lock lock(mutex_);
     return producerIdGenerator_++;
 }
 
 uint64_t ClientImpl::newConsumerId() {
-    Lock lock(mutex_);
     return consumerIdGenerator_++;
-}
-
-uint64_t ClientImpl::newRequestId() {
-    Lock lock(mutex_);
-    return requestIdGenerator_++;
 }
 
 uint64_t ClientImpl::getNumberOfProducers() {

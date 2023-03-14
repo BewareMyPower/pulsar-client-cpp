@@ -104,7 +104,6 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     uint64_t newProducerId();
     uint64_t newConsumerId();
-    uint64_t newRequestId();
 
     uint64_t getNumberOfProducers();
     uint64_t getNumberOfConsumers();
@@ -173,9 +172,9 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
     LookupServicePtr lookupServicePtr_;
     ConnectionPool pool_;
 
-    uint64_t producerIdGenerator_;
-    uint64_t consumerIdGenerator_;
-    uint64_t requestIdGenerator_;
+    std::atomic<uint64_t> producerIdGenerator_{0};
+    std::atomic<uint64_t> consumerIdGenerator_{0};
+    std::shared_ptr<std::atomic<uint64_t>> requestIdGenerator_{std::make_shared<std::atomic<uint64_t>>(0)};
 
     SynchronizedHashMap<ProducerImplBase*, ProducerImplBaseWeakPtr> producers_;
     SynchronizedHashMap<ConsumerImplBase*, ConsumerImplBaseWeakPtr> consumers_;

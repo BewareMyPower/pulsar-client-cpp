@@ -20,6 +20,7 @@
 #define _PULSAR_HANDLER_BASE_HEADER_
 #include <pulsar/Result.h>
 
+#include <atomic>
 #include <boost/asio/deadline_timer.hpp>
 #include <memory>
 #include <mutex>
@@ -46,7 +47,7 @@ class ExecutorService;
 using ExecutorServicePtr = std::shared_ptr<ExecutorService>;
 using DeadlineTimerPtr = std::shared_ptr<boost::asio::deadline_timer>;
 
-class HandlerBase {
+class HandlerBase : public std::enable_shared_from_this<HandlerBase> {
    public:
     HandlerBase(const ClientImplPtr&, const std::string&, const Backoff&);
 
@@ -93,14 +94,14 @@ class HandlerBase {
 
     virtual const std::string& getName() const = 0;
 
+    void disconnect(ClientConnection* cnx);
+
+    void reconnect();
+
    private:
-    static void handleNewConnection(Result result, ClientConnectionWeakPtr connection, HandlerBaseWeakPtr wp);
-    static void handleDisconnection(Result result, ClientConnectionWeakPtr connection, HandlerBaseWeakPtr wp);
-
-    static void handleTimeout(const boost::system::error_code& ec, HandlerBasePtr handler);
-
-   protected:
     ClientImplWeakPtr client_;
+
+   public:
     const std::string topic_;
     ExecutorServicePtr executor_;
     mutable std::mutex mutex_;
@@ -125,7 +126,7 @@ class HandlerBase {
 
     std::atomic<State> state_;
     Backoff backoff_;
-    uint64_t epoch_;
+    std::atomic<uint64_t> epoch_;
 
    private:
     DeadlineTimerPtr timer_;
