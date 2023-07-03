@@ -34,6 +34,7 @@
 #include "CustomRoutingPolicy.h"
 #include "HttpHelper.h"
 #include "PulsarFriend.h"
+#include "WaitUtils.h"
 #include "lib/AckGroupingTrackerDisabled.h"
 #include "lib/AckGroupingTrackerEnabled.h"
 #include "lib/ClientConnection.h"
@@ -67,11 +68,6 @@ std::string unique_str() {
                      .count();
 
     return std::to_string(uniqueCounter++) + "_" + std::to_string(nanos);
-}
-
-static void messageListenerFunction(Consumer consumer, const Message &msg) {
-    globalCount++;
-    consumer.acknowledge(msg);
 }
 
 static void messageListenerFunctionWithoutAck(Consumer consumer, const Message &msg, Latch &latch,
@@ -867,7 +863,7 @@ TEST(BasicEndToEndTest, testRoundRobinRoutingPolicy) {
 
 TEST(BasicEndToEndTest, testMessageListener) {
     Client client(lookupUrl);
-    std::string topicName = "partition-testMessageListener";
+    std::string topicName = "partition-testMessageListener-" + unique_str();
     // call admin api to make it partitioned
     std::string url =
         adminUrl + "admin/v2/persistent/public/default/partition-testMessageListener/partitions";
@@ -881,12 +877,9 @@ TEST(BasicEndToEndTest, testMessageListener) {
     producerConfiguration.setPartitionsRoutingMode(ProducerConfiguration::UseSinglePartition);
     Result result = client.createProducer(topicName, producerConfiguration, producer);
 
-    // Initializing global Count
-    globalCount = 0;
-
+    std::atomic_int count{0};
     ConsumerConfiguration consumerConfig;
-    consumerConfig.setMessageListener(
-        std::bind(messageListenerFunction, std::placeholders::_1, std::placeholders::_2));
+    consumerConfig.setMessageListener([&count](Consumer, const Message &) { count++; });
     Consumer consumer;
     result = client.subscribe(topicName, "subscription-A", consumerConfig, consumer);
 
@@ -900,9 +893,8 @@ TEST(BasicEndToEndTest, testMessageListener) {
         ASSERT_EQ(ResultOk, producer.send(msg));
     }
 
-    // Sleeping for 5 seconds
-    std::this_thread::sleep_for(std::chrono::microseconds(5 * 1000 * 1000));
-    ASSERT_EQ(globalCount, 10);
+    waitUntil(std::chrono::seconds(5), [&count] { return count >= 10; });
+    ASSERT_EQ(count, 10);
     consumer.close();
     producer.close();
     client.close();
@@ -910,7 +902,7 @@ TEST(BasicEndToEndTest, testMessageListener) {
 
 TEST(BasicEndToEndTest, testMessageListenerPause) {
     Client client(lookupUrl);
-    std::string topicName = "partition-testMessageListenerPause";
+    std::string topicName = "partition-testMessageListenerPause-" + unique_str();
 
     // call admin api to make it partitioned
     std::string url =
@@ -923,42 +915,37 @@ TEST(BasicEndToEndTest, testMessageListenerPause) {
     Producer producer;
     ProducerConfiguration producerConfiguration;
     producerConfiguration.setPartitionsRoutingMode(ProducerConfiguration::UseSinglePartition);
-    Result result = client.createProducer(topicName, producerConfiguration, producer);
+    ASSERT_EQ(ResultOk, client.createProducer(topicName, producerConfiguration, producer));
 
-    // Initializing global Count
-    globalCount = 0;
-
+    std::atomic_int count{0};
     ConsumerConfiguration consumerConfig;
-    consumerConfig.setMessageListener(
-        std::bind(messageListenerFunction, std::placeholders::_1, std::placeholders::_2));
+    consumerConfig.setMessageListener([&count](Consumer, const Message &) { count++; });
     Consumer consumer;
-    // Removing dangling subscription from previous test failures
-    result = client.subscribe(topicName, "subscription-name", consumerConfig, consumer);
-    consumer.unsubscribe();
-
-    result = client.subscribe(topicName, "subscription-name", consumerConfig, consumer);
-    ASSERT_EQ(ResultOk, result);
+    ASSERT_EQ(ResultOk, client.subscribe(topicName, "subscription-name", consumerConfig, consumer));
     int temp = 1000;
     for (int i = 0; i < 10000; i++) {
         if (i && i % 1000 == 0) {
-            std::this_thread::sleep_for(std::chrono::microseconds(2 * 1000 * 1000));
-            ASSERT_EQ(globalCount, temp);
+            waitUntil(
+                std::chrono::seconds(2), [&count, temp] { return count >= temp; }, 1);
+            ASSERT_EQ(count, temp);
             consumer.resumeMessageListener();
-            std::this_thread::sleep_for(std::chrono::microseconds(2 * 1000 * 1000));
-            ASSERT_EQ(globalCount, i);
-            temp = globalCount;
+            LOG_INFO(i << " Resume the message listener...")
+            waitUntil(
+                std::chrono::seconds(2), [&count, i] { return count >= i; }, 1);
+            ASSERT_EQ(count, i);
+            temp = count;
             consumer.pauseMessageListener();
+            LOG_INFO(i << " Pause the message listener...")
         }
-        Message msg = MessageBuilder().build();
+        Message msg = MessageBuilder().setContent("msg-" + std::to_string(i)).build();
         ASSERT_EQ(ResultOk, producer.send(msg));
     }
 
-    ASSERT_EQ(globalCount, temp);
+    ASSERT_EQ(count, temp);
     consumer.resumeMessageListener();
-    // Sleeping for 2 seconds
-    std::this_thread::sleep_for(std::chrono::microseconds(2 * 1000 * 1000));
-
-    ASSERT_EQ(globalCount, 10000);
+    waitUntil(
+        std::chrono::seconds(2), [&count] { return count >= 10000; }, 1);
+    ASSERT_EQ(count, 10000);
     consumer.close();
     producer.close();
     client.close();
