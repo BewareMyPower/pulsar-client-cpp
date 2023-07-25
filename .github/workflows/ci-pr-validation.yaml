@@ -106,7 +106,6 @@ jobs:
             -S .
           cmake --build $BUILD_DIR --parallel --config Release
           cmake --install $BUILD_DIR
-          cp dependencies.txt ${{ env.INSTALL_DIR }}
 
       - name: Zip artifact
         shell: bash
