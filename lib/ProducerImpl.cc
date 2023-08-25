@@ -842,14 +842,14 @@ void ProducerImpl::handleSendTimeout(const boost::system::error_code& err) {
 }
 
 bool ProducerImpl::removeCorruptMessage(uint64_t sequenceId) {
-    Lock lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     if (pendingMessagesQueue_.empty()) {
         LOG_DEBUG(getName() << " -- SequenceId - " << sequenceId << "]"  //
                             << "Got send failure for expired message, ignoring it.");
         return true;
     }
 
-    OpSendMsg op = pendingMessagesQueue_.front();
+    const auto& op = pendingMessagesQueue_.front();
     uint64_t expectedSequenceId = op.sequenceId_;
     if (sequenceId > expectedSequenceId) {
         LOG_WARN(getName() << "Got ack failure for msg " << sequenceId                //
@@ -861,8 +861,6 @@ bool ProducerImpl::removeCorruptMessage(uint64_t sequenceId) {
         return true;
     } else {
         LOG_DEBUG(getName() << "Remove corrupt message from queue " << sequenceId);
-        pendingMessagesQueue_.pop_front();
-        lock.unlock();
         try {
             // to protect from client callback exception
             op.complete(ResultChecksumError, {});
@@ -870,13 +868,14 @@ bool ProducerImpl::removeCorruptMessage(uint64_t sequenceId) {
             LOG_ERROR(getName() << "Exception thrown from callback " << e.what());
         }
         releaseSemaphoreForSendOp(op);
+        pendingMessagesQueue_.pop_front();
         return true;
     }
 }
 
 bool ProducerImpl::ackReceived(uint64_t sequenceId, MessageId& rawMessageId) {
     auto messageId = MessageIdBuilder::from(rawMessageId).partition(partition_).build();
-    Lock lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
 
     if (pendingMessagesQueue_.empty()) {
         LOG_DEBUG(getName() << " -- SequenceId - " << sequenceId << "]"  //
@@ -885,7 +884,7 @@ bool ProducerImpl::ackReceived(uint64_t sequenceId, MessageId& rawMessageId) {
         return true;
     }
 
-    OpSendMsg op = pendingMessagesQueue_.front();
+    const auto& op = pendingMessagesQueue_.front();
     uint64_t expectedSequenceId = op.sequenceId_;
     if (sequenceId > expectedSequenceId) {
         LOG_WARN(getName() << "Got ack for msg " << sequenceId                        //
@@ -916,14 +915,12 @@ bool ProducerImpl::ackReceived(uint64_t sequenceId, MessageId& rawMessageId) {
     releaseSemaphoreForSendOp(op);
     lastSequenceIdPublished_ = sequenceId + op.messagesCount_ - 1;
 
-    pendingMessagesQueue_.pop_front();
-
-    lock.unlock();
     try {
         op.complete(ResultOk, messageId);
     } catch (const std::exception& e) {
         LOG_ERROR(getName() << "Exception thrown from callback " << e.what());
     }
+    pendingMessagesQueue_.pop_front();
     return true;
 }
 
