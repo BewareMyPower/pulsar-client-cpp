@@ -32,8 +32,13 @@ using boost::posix_time::seconds;
 
 class PULSAR_PUBLIC TimeUtils {
    public:
-    static ptime now();
-    static int64_t currentTimeMillis();
+    static ptime now() { return microsec_clock::universal_time(); }
+
+    static int64_t currentTimeMillis() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    }
 };
 
 // This class processes a timeout with the following semantics:
