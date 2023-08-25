@@ -39,7 +39,6 @@
 #include "Semaphore.h"
 #include "TimeUtils.h"
 #include "TopicName.h"
-#include "stats/ProducerStatsDisabled.h"
 #include "stats/ProducerStatsImpl.h"
 
 namespace pulsar {
@@ -93,13 +92,11 @@ ProducerImpl::ProducerImpl(ClientImplPtr client, const TopicName& topicName,
     }
 
     unsigned int statsIntervalInSeconds = client->getClientConfig().getStatsIntervalInSeconds();
-    if (statsIntervalInSeconds) {
-        producerStatsBasePtr_ =
+    if (statsIntervalInSeconds > 0) {
+        producerStatsPtr_ =
             std::make_shared<ProducerStatsImpl>(producerStr_, executor_, statsIntervalInSeconds);
-    } else {
-        producerStatsBasePtr_ = std::make_shared<ProducerStatsDisabled>();
+        producerStatsPtr_->start();
     }
-    producerStatsBasePtr_->start();
 
     if (conf_.isEncryptionEnabled()) {
         std::ostringstream logCtxStream;
@@ -443,16 +440,24 @@ static SharedBuffer applyCompression(const SharedBuffer& uncompressedPayload,
 }
 
 void ProducerImpl::sendAsync(const Message& msg, SendCallback callback) {
-    producerStatsBasePtr_->messageSent(msg);
+    if (producerStatsPtr_) {
+        producerStatsPtr_->messageSent(msg);
+    }
 
     Producer producer = Producer(shared_from_this());
     auto interceptorMessage = interceptors_->beforeSend(producer, msg);
 
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    static auto DEFAULT_NOW = boost::posix_time::from_time_t(static_cast<std::time_t>(0L));
+    boost::posix_time::ptime now = DEFAULT_NOW;
+    if (producerStatsPtr_) {
+        now = boost::posix_time::microsec_clock::universal_time();
+    }
     auto self = shared_from_this();
     sendAsyncWithStatsUpdate(interceptorMessage, [this, self, now, callback, producer, interceptorMessage](
                                                      Result result, const MessageId& messageId) {
-        producerStatsBasePtr_->messageReceived(result, now);
+        if (producerStatsPtr_) {
+            producerStatsPtr_->messageReceived(result, now);
+        }
 
         interceptors_->onSendAcknowledgement(producer, result, interceptorMessage, messageId);
 

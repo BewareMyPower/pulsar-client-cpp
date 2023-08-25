@@ -25,6 +25,9 @@
 #if BOOST_VERSION >= 106400
 #include <boost/serialization/array_wrapper.hpp>
 #endif
+#include <pulsar/Message.h>
+#include <pulsar/Result.h>
+
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/framework/accumulator_set.hpp>
 #include <boost/accumulators/framework/features.hpp>
@@ -32,12 +35,11 @@
 #include <boost/accumulators/statistics/extended_p_square.hpp>
 #include <boost/asio/deadline_timer.hpp>
 #include <boost/date_time/local_time/local_time.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <vector>
-
-#include "ProducerStatsBase.h"
 
 namespace pulsar {
 
@@ -50,7 +52,7 @@ typedef boost::accumulators::accumulator_set<
     boost::accumulators::stats<boost::accumulators::tag::mean, boost::accumulators::tag::extended_p_square> >
     LatencyAccumulator;
 
-class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl>, public ProducerStatsBase {
+class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl> {
    private:
     std::string producerStr_;
 
@@ -81,13 +83,13 @@ class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl>
 
     ProducerStatsImpl(const ProducerStatsImpl& stats);
 
-    void start() override;
+    void start();
 
     void flushAndReset(const boost::system::error_code&);
 
-    void messageSent(const Message&) override;
+    void messageSent(const Message&);
 
-    void messageReceived(Result, const boost::posix_time::ptime&) override;
+    void messageReceived(Result, const boost::posix_time::ptime&);
 
     ~ProducerStatsImpl();
 

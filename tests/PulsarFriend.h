@@ -41,7 +41,7 @@ class PulsarFriend {
    public:
     static ProducerStatsImplPtr getProducerStatsPtr(Producer producer) {
         ProducerImpl* producerImpl = static_cast<ProducerImpl*>(producer.impl_.get());
-        return std::static_pointer_cast<ProducerStatsImpl>(producerImpl->producerStatsBasePtr_);
+        return producerImpl->producerStatsPtr_;
     }
 
     template <typename T>

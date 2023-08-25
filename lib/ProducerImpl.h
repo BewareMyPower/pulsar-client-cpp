@@ -42,8 +42,7 @@ class MessageCrypto;
 using MessageCryptoPtr = std::shared_ptr<MessageCrypto>;
 class ProducerImpl;
 using ProducerImplWeakPtr = std::weak_ptr<ProducerImpl>;
-class ProducerStatsBase;
-using ProducerStatsBasePtr = std::shared_ptr<ProducerStatsBase>;
+class ProducerStatsImpl;
 struct ResponseData;
 class ProducerImpl;
 using ProducerImplPtr = std::shared_ptr<ProducerImpl>;
@@ -102,7 +101,7 @@ class ProducerImpl : public HandlerBase,
     ProducerImplWeakPtr weak_from_this() noexcept;
 
    protected:
-    ProducerStatsBasePtr producerStatsBasePtr_;
+    std::shared_ptr<ProducerStatsImpl> producerStatsPtr_;
 
     typedef std::deque<OpSendMsg> MessageQueue;
 
