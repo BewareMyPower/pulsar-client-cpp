@@ -210,8 +210,8 @@ PairSharedBuffer Commands::newSend(SharedBuffer& headers, BaseCommand& cmd, uint
     // / Wire format
     // [TOTAL_SIZE] [CMD_SIZE][CMD] [MAGIC_NUMBER][CHECKSUM] [METADATA_SIZE][METADATA] [PAYLOAD]
 
-    int cmdSize = cmd.ByteSize();
-    int msgMetadataSize = metadata.ByteSize();
+    int cmdSize = cmd.ByteSizeLong();
+    int msgMetadataSize = metadata.ByteSizeLong();
     int payloadSize = payload.readableBytes();
 
     int magicAndChecksumLength = (Crc32c == (checksumType)) ? (2 + 4 /* magic + checksumLength*/) : 0;
@@ -910,7 +910,8 @@ Message Commands::deSerializeSingleMessageInBatch(Message& batchedMessage, int32
     const MessageId& m = batchedMessage.impl_->messageId;
     auto messageId = MessageIdBuilder::from(m).batchIndex(batchIndex).batchSize(batchSize).build();
     auto batchedMessageId = std::make_shared<BatchedMessageIdImpl>(*(messageId.impl_), acker);
-    Message singleMessage(MessageId{batchedMessageId}, batchedMessage.impl_->brokerEntryMetadata,
+
+    Message singleMessage(MessageId{batchedMessageId}, batchedMessage.impl_->index,
                           batchedMessage.impl_->metadata, payload, metadata,
                           batchedMessage.impl_->topicName_);
     singleMessage.impl_->cnx_ = batchedMessage.impl_->cnx_;

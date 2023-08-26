@@ -542,10 +542,6 @@ void ConsumerImpl::messageReceived(const ClientConnectionPtr& cnx, const proto::
     m.impl_->setTopicName(topic_);
     m.impl_->setRedeliveryCount(msg.redelivery_count());
 
-    if (metadata.has_schema_version()) {
-        m.impl_->setSchemaVersion(metadata.schema_version());
-    }
-
     LOG_DEBUG(getName() << " metadata.num_messages_in_batch() = " << metadata.num_messages_in_batch());
     LOG_DEBUG(getName() << " metadata.has_num_messages_in_batch() = "
                         << metadata.has_num_messages_in_batch());
@@ -707,9 +703,9 @@ uint32_t ConsumerImpl::receiveIndividualMessagesFromBatch(const ClientConnection
         msg.impl_->setRedeliveryCount(redeliveryCount);
         msg.impl_->setTopicName(batchedMessage.impl_->topicName_);
         msg.impl_->convertPayloadToKeyValue(config_.getSchema());
-        if (msg.impl_->brokerEntryMetadata.has_index()) {
-            msg.impl_->brokerEntryMetadata.set_index(msg.impl_->brokerEntryMetadata.index() - batchSize + i +
-                                                     1);
+        if (msg.impl_->index >= 0) {
+            const auto index = msg.impl_->index;
+            msg.impl_->index = index - batchSize + i + 1;
         }
 
         if (redeliveryCount >= deadLetterPolicy_.getMaxRedeliverCount()) {

@@ -205,9 +205,9 @@ class PULSAR_PUBLIC Message {
     Message(const MessageId& messageId, proto::BrokerEntryMetadata& brokerEntryMetadata,
             proto::MessageMetadata& metadata, SharedBuffer& payload);
     /// Used for Batch Messages
-    Message(const MessageId& messageId, proto::BrokerEntryMetadata& brokerEntryMetadata,
-            proto::MessageMetadata& metadata, SharedBuffer& payload,
-            proto::SingleMessageMetadata& singleMetadata, const std::shared_ptr<std::string>& topicName);
+    Message(const MessageId& messageId, int64_t index, proto::MessageMetadata& metadata,
+            SharedBuffer& payload, proto::SingleMessageMetadata& singleMetadata,
+            const std::shared_ptr<std::string>& topicName);
     friend class PartitionedProducerImpl;
     friend class MultiTopicsConsumerImpl;
     friend class MessageBuilder;

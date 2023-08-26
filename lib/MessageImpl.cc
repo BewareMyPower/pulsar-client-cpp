@@ -96,8 +96,6 @@ void MessageImpl::setRedeliveryCount(int count) { redeliveryCount_ = count; }
 
 bool MessageImpl::hasSchemaVersion() const { return metadata.has_schema_version(); }
 
-void MessageImpl::setSchemaVersion(const std::string& schemaVersion) { schemaVersion_ = &schemaVersion; }
-
 const std::string& MessageImpl::getSchemaVersion() const { return metadata.schema_version(); }
 
 void MessageImpl::convertKeyValueToPayload(const pulsar::SchemaInfo& schemaInfo) {

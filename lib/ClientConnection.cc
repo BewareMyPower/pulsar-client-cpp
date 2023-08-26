@@ -678,8 +678,10 @@ void ClientConnection::processIncomingBuffer() {
 
         if (incomingCmd.type() == BaseCommand::MESSAGE) {
             // Parse message metadata and extract payload
-            proto::MessageMetadata msgMetadata;
-            proto::BrokerEntryMetadata brokerEntryMetadata;
+            thread_local proto::MessageMetadata msgMetadata;
+            thread_local proto::BrokerEntryMetadata brokerEntryMetadata;
+            msgMetadata.Clear();
+            brokerEntryMetadata.Clear();
 
             // read checksum
             uint32_t remainingBytes = frameSize - (cmdSize + 4);

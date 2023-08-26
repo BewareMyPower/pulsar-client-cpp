@@ -37,7 +37,7 @@ class MessageImpl {
    public:
     const Message::StringMap& properties();
 
-    proto::BrokerEntryMetadata brokerEntryMetadata;
+    int64_t index;
     proto::MessageMetadata metadata;
     SharedBuffer payload;
     std::shared_ptr<KeyValueImpl> keyValuePtr;
@@ -45,8 +45,6 @@ class MessageImpl {
     ClientConnection* cnx_;
     std::shared_ptr<std::string> topicName_;
     int redeliveryCount_;
-    bool hasSchemaVersion_;
-    const std::string* schemaVersion_;
 
     const std::string& getPartitionKey() const;
     bool hasPartitionKey() const;
@@ -72,7 +70,6 @@ class MessageImpl {
 
     bool hasSchemaVersion() const;
     const std::string& getSchemaVersion() const;
-    void setSchemaVersion(const std::string& value);
     void convertKeyValueToPayload(const SchemaInfo& schemaInfo);
     void convertPayloadToKeyValue(const SchemaInfo& schemaInfo);
     KeyValueEncodingType getKeyValueEncodingType(SchemaInfo schemaInfo);

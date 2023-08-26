@@ -74,17 +74,17 @@ Message::Message(const MessageId& messageId, proto::BrokerEntryMetadata& brokerE
                  proto::MessageMetadata& metadata, SharedBuffer& payload)
     : impl_(std::make_shared<MessageImpl>()) {
     impl_->messageId = messageId;
-    impl_->brokerEntryMetadata = brokerEntryMetadata;
+    impl_->index = brokerEntryMetadata.has_index() ? static_cast<int64_t>(brokerEntryMetadata.index()) : -1L;
     impl_->metadata = metadata;
     impl_->payload = payload;
 }
 
-Message::Message(const MessageId& messageID, proto::BrokerEntryMetadata& brokerEntryMetadata,
-                 proto::MessageMetadata& metadata, SharedBuffer& payload,
-                 proto::SingleMessageMetadata& singleMetadata, const std::shared_ptr<std::string>& topicName)
+Message::Message(const MessageId& messageID, int64_t index, proto::MessageMetadata& metadata,
+                 SharedBuffer& payload, proto::SingleMessageMetadata& singleMetadata,
+                 const std::shared_ptr<std::string>& topicName)
     : impl_(std::make_shared<MessageImpl>()) {
     impl_->messageId = messageID;
-    impl_->brokerEntryMetadata = brokerEntryMetadata;
+    impl_->index = index;
     impl_->metadata = metadata;
     impl_->payload = payload;
     impl_->metadata.mutable_properties()->CopyFrom(singleMetadata.properties());
@@ -140,14 +140,7 @@ void Message::setMessageId(const MessageId& messageID) const {
     return;
 }
 
-int64_t Message::getIndex() const {
-    if (!impl_ || !impl_->brokerEntryMetadata.has_index()) {
-        return -1;
-    } else {
-        // casting uint64_t to int64_t, server definition ensures that's safe
-        return static_cast<int64_t>(impl_->brokerEntryMetadata.index());
-    }
-}
+int64_t Message::getIndex() const { return impl_ ? impl_->index : -1L; }
 
 bool Message::hasPartitionKey() const {
     if (impl_) {
