@@ -129,8 +129,8 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
     friend class PulsarFriend;
 
     template <typename Function>
-    void dispatch(Function&& function) {
-        boost::asio::dispatch(pool_, function);
+    void dispatch(Function&& f) {
+        boost::asio::dispatch(sendCallbackPool_, std::move(f));
     }
 
    private:
