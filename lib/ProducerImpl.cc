@@ -39,7 +39,6 @@
 #include "Semaphore.h"
 #include "TimeUtils.h"
 #include "TopicName.h"
-#include "stats/ProducerStatsDisabled.h"
 #include "stats/ProducerStatsImpl.h"
 
 namespace pulsar {
@@ -82,13 +81,11 @@ ProducerImpl::ProducerImpl(ClientImplPtr client, const TopicName& topicName,
     }
 
     unsigned int statsIntervalInSeconds = client->getClientConfig().getStatsIntervalInSeconds();
-    if (statsIntervalInSeconds) {
+    if (statsIntervalInSeconds > 0) {
         producerStatsBasePtr_ =
             std::make_shared<ProducerStatsImpl>(producerStr_, executor_, statsIntervalInSeconds);
-    } else {
-        producerStatsBasePtr_ = std::make_shared<ProducerStatsDisabled>();
+        producerStatsBasePtr_->start();
     }
-    producerStatsBasePtr_->start();
 
     if (conf_.isEncryptionEnabled()) {
         std::ostringstream logCtxStream;
@@ -342,22 +339,6 @@ void ProducerImpl::resendMessages(ClientConnectionPtr cnx) {
     }
 }
 
-void ProducerImpl::setMessageMetadata(const Message& msg, const uint64_t& sequenceId,
-                                      const uint32_t& uncompressedSize) {
-    // Call this function after acquiring the mutex_
-    proto::MessageMetadata& msgMetadata = msg.impl_->metadata;
-    msgMetadata.set_producer_name(producerName_);
-    msgMetadata.set_publish_time(TimeUtils::currentTimeMillis());
-    msgMetadata.set_sequence_id(sequenceId);
-    if (conf_.getCompressionType() != CompressionNone) {
-        msgMetadata.set_compression(static_cast<proto::CompressionType>(conf_.getCompressionType()));
-        msgMetadata.set_uncompressed_size(uncompressedSize);
-    }
-    if (!this->getSchemaVersion().empty()) {
-        msgMetadata.set_schema_version(this->getSchemaVersion());
-    }
-}
-
 void ProducerImpl::flushAsync(FlushCallback callback) {
     if (state_ != Ready) {
         callback(ResultAlreadyClosed);
@@ -435,18 +416,24 @@ static SharedBuffer applyCompression(const SharedBuffer& uncompressedPayload,
 }
 
 void ProducerImpl::sendAsync(const Message& msg, SendCallback callback) {
-    producerStatsBasePtr_->messageSent(msg);
-
-    Producer producer = Producer(shared_from_this());
-    auto interceptorMessage = interceptors_->beforeSend(producer, msg);
-
-    const auto now = boost::posix_time::microsec_clock::universal_time();
+    if (!producerStatsBasePtr_ && !interceptors_) {
+        return sendAsyncWithStatsUpdate(msg, std::move(callback));
+    }
     auto self = shared_from_this();
-    sendAsyncWithStatsUpdate(interceptorMessage, [this, self, now, callback, producer, interceptorMessage](
-                                                     Result result, const MessageId& messageId) {
-        producerStatsBasePtr_->messageReceived(result, now);
+    if (producerStatsBasePtr_) {
+        producerStatsBasePtr_->messageSent(msg);
+    }
 
-        interceptors_->onSendAcknowledgement(producer, result, interceptorMessage, messageId);
+    const auto interceptorMessage = interceptors_ ? interceptors_->beforeSend(Producer{self}, msg) : msg;
+    const auto now = producerStatsBasePtr_ ? TimeUtils::now() : boost::posix_time::ptime{};
+
+    sendAsyncWithStatsUpdate(interceptorMessage, [this, self, now, callback, interceptorMessage](
+                                                     Result result, const MessageId& messageId) {
+        if (producerStatsBasePtr_) {
+            producerStatsBasePtr_->messageReceived(result, now);
+        }
+
+        interceptors_->onSendAcknowledgement(Producer{self}, result, interceptorMessage, messageId);
 
         if (callback) {
             callback(result, messageId);
@@ -501,10 +488,22 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
     uint64_t sequenceId;
     if (!msgMetadata.has_sequence_id()) {
         sequenceId = msgSequenceGenerator_++;
+        msgMetadata.set_sequence_id(sequenceId);
     } else {
         sequenceId = msgMetadata.sequence_id();
     }
-    setMessageMetadata(msg, sequenceId, uncompressedSize);
+
+    if (compressed || batchMessageContainer_->isFirstMessageToAdd(msg)) {
+        msgMetadata.set_producer_name(producerName_);
+        msgMetadata.set_publish_time(TimeUtils::currentTimeMillis());
+        if (conf_.getCompressionType() != CompressionNone) {
+            msgMetadata.set_compression(static_cast<proto::CompressionType>(conf_.getCompressionType()));
+            msgMetadata.set_uncompressed_size(uncompressedSize);
+        }
+        if (!schemaVersion_.empty()) {
+            msgMetadata.set_schema_version(schemaVersion_);
+        }
+    }  // else: The 2nd or later message in the batch only needs to set the sequence id
 
     auto payloadChunkSize = maxMessageSize;
     int totalChunks;
@@ -531,7 +530,7 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
         }
     }
 
-    if (canAddToBatch(msg)) {
+    if (!compressed) {
         // Batching is enabled and the message is not delayed
         if (!batchMessageContainer_->hasEnoughSpace(msg)) {
             batchMessageAndSend().complete();

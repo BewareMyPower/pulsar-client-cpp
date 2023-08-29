@@ -104,8 +104,6 @@ class ProducerImpl : public HandlerBase,
    protected:
     ProducerStatsBasePtr producerStatsBasePtr_;
 
-    void setMessageMetadata(const Message& msg, const uint64_t& sequenceId, const uint32_t& uncompressedSize);
-
     void sendMessage(std::unique_ptr<OpSendMsg> opSendMsg);
 
     void startSendTimeoutTimer();
