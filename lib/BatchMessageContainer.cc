@@ -28,7 +28,7 @@ DECLARE_LOG_OBJECT()
 namespace pulsar {
 
 BatchMessageContainer::BatchMessageContainer(const ProducerImpl& producer)
-    : BatchMessageContainerBase(producer) {}
+    : BatchMessageContainerBase(producer), batch_(producerConfig_.getBatchingMaxMessages()) {}
 
 BatchMessageContainer::~BatchMessageContainer() {
     LOG_DEBUG(*this << " destructed");

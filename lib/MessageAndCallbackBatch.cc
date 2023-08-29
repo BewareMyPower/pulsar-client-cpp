@@ -29,7 +29,10 @@
 
 namespace pulsar {
 
-MessageAndCallbackBatch::MessageAndCallbackBatch() {}
+MessageAndCallbackBatch::MessageAndCallbackBatch(size_t capacity) {
+    messages_.reserve(capacity);
+    callbacks_.reserve(capacity);
+}
 
 MessageAndCallbackBatch::~MessageAndCallbackBatch() {}
 

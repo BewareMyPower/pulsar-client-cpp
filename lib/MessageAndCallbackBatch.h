@@ -39,7 +39,9 @@ class MessageMetadata;
 
 class MessageAndCallbackBatch final : public boost::noncopyable {
    public:
-    MessageAndCallbackBatch();
+    // This default constructor is added just to make this class able to be stored in a map
+    MessageAndCallbackBatch() = default;
+    MessageAndCallbackBatch(size_t capacity);
     ~MessageAndCallbackBatch();
 
     // Wrapper methods of STL container

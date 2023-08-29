@@ -57,7 +57,12 @@ bool BatchMessageKeyBasedContainer::isFirstMessageToAdd(const Message& msg) cons
 
 bool BatchMessageKeyBasedContainer::add(const Message& msg, SendCallback&& callback) {
     LOG_DEBUG("Before add: " << *this << " [message = " << msg << "]");
-    batches_[getKey(msg)].add(msg, std::move(callback));
+    const auto key = getKey(msg);
+    auto it = batches_.find(getKey(msg));
+    if (it == batches_.end()) {
+        it = batches_.emplace(key, static_cast<size_t>(producerConfig_.getBatchingMaxMessages())).first;
+    }
+    it->second.add(msg, std::move(callback));
     updateStats(msg);
     LOG_DEBUG("After add: " << *this);
     return isFull();
