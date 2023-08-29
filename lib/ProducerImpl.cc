@@ -536,7 +536,7 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
             batchMessageAndSend().complete();
         }
         bool isFirstMessage = batchMessageContainer_->isFirstMessageToAdd(msg);
-        bool isFull = batchMessageContainer_->add(msg, callback);
+        bool isFull = batchMessageContainer_->add(msg, std::move(callback));
         if (isFirstMessage) {
             batchTimer_->expires_from_now(
                 boost::posix_time::milliseconds(conf_.getBatchingMaxPublishDelayMs()));

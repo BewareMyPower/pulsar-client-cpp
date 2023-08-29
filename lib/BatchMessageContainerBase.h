@@ -67,7 +67,7 @@ class BatchMessageContainerBase : public boost::noncopyable {
      * @param callback message send callback
      * @return true if the batch is full, otherwise false
      */
-    virtual bool add(const Message& msg, const SendCallback& callback) = 0;
+    virtual bool add(const Message& msg, SendCallback&& callback) = 0;
 
     virtual std::unique_ptr<OpSendMsg> createOpSendMsg(const FlushCallback& flushCallback = nullptr) {
         throw std::runtime_error("createOpSendMsg is not supported");

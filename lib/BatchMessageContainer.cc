@@ -36,9 +36,9 @@ BatchMessageContainer::~BatchMessageContainer() {
                                         << "] [averageBatchSize_ = " << averageBatchSize_ << "]");
 }
 
-bool BatchMessageContainer::add(const Message& msg, const SendCallback& callback) {
+bool BatchMessageContainer::add(const Message& msg, SendCallback&& callback) {
     LOG_DEBUG("Before add: " << *this << " [message = " << msg << "]");
-    batch_.add(msg, callback);
+    batch_.add(msg, std::move(callback));
     updateStats(msg);
     LOG_DEBUG("After add: " << *this);
     return isFull();

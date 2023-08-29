@@ -52,7 +52,7 @@ class MessageAndCallbackBatch final : public boost::noncopyable {
      * @param message
      * @callback the associated send callback
      */
-    void add(const Message& msg, const SendCallback& callback);
+    void add(const Message& msg, SendCallback&& callback);
 
     std::unique_ptr<OpSendMsg> createOpSendMsg(uint64_t producerId,
                                                const ProducerConfiguration& producerConfig,

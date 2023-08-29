@@ -33,14 +33,14 @@ MessageAndCallbackBatch::MessageAndCallbackBatch() {}
 
 MessageAndCallbackBatch::~MessageAndCallbackBatch() {}
 
-void MessageAndCallbackBatch::add(const Message& msg, const SendCallback& callback) {
+void MessageAndCallbackBatch::add(const Message& msg, SendCallback&& callback) {
     if (callbacks_.empty()) {
         metadata_.reset(new proto::MessageMetadata);
         Commands::initBatchMessageMetadata(msg, *metadata_);
         sequenceId_ = metadata_->sequence_id();
     }
     messages_.emplace_back(msg);
-    callbacks_.emplace_back(callback);
+    callbacks_.emplace_back(std::move(callback));
     messagesSize_ += msg.getLength();
 }
 
