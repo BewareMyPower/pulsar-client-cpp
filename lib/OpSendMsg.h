@@ -26,6 +26,7 @@
 #include <boost/date_time/posix_time/ptime.hpp>
 
 #include "ChunkMessageIdImpl.h"
+#include "MessageIdImpl.h"
 #include "PulsarApi.pb.h"
 #include "SharedBuffer.h"
 #include "TimeUtils.h"
@@ -52,7 +53,8 @@ struct OpSendMsg {
     const uint32_t messagesCount;
     const uint64_t messagesSize;
     const boost::posix_time::ptime timeout;
-    const SendCallback sendCallback;
+    SendCallback nonBatchSendCallback;
+    std::vector<SendCallback> batchSendCallbacks;
     std::vector<std::function<void(Result)>> trackerCallbacks;
     ChunkMessageIdImplPtr chunkedMessageId;
     // Use shared_ptr here because producer might resend the message with the same arguments
@@ -64,8 +66,20 @@ struct OpSendMsg {
     }
 
     void complete(Result result, const MessageId& messageId) const {
-        if (sendCallback) {
-            sendCallback(result, messageId);
+        for (size_t i = 0; i < batchSendCallbacks.size(); i++) {
+            auto& callback = batchSendCallbacks[i];
+            if (callback) {
+                if (result == ResultOk) {
+                    auto msgIdImpl = std::make_shared<MessageIdImpl>(
+                        messageId.partition(), messageId.ledgerId(), messageId.entryId(), i);
+                    callback(result, MessageId{msgIdImpl});
+                } else {
+                    callback(result, {});
+                }
+            }
+        }
+        if (nonBatchSendCallback) {
+            nonBatchSendCallback(result, messageId);
         }
         for (const auto& trackerCallback : trackerCallbacks) {
             trackerCallback(result);
@@ -79,13 +93,13 @@ struct OpSendMsg {
     }
 
    private:
-    OpSendMsg(Result result, SendCallback&& callback)
+    OpSendMsg(Result result, std::vector<SendCallback>&& callbacks)
         : result(result),
           chunkId(-1),
           numChunks(-1),
           messagesCount(0),
           messagesSize(0),
-          sendCallback(std::move(callback)),
+          batchSendCallbacks(std::move(callbacks)),
           sendArgs(nullptr) {}
 
     OpSendMsg(const proto::MessageMetadata& metadata, uint32_t messagesCount, uint64_t messagesSize,
@@ -97,7 +111,20 @@ struct OpSendMsg {
           messagesCount(messagesCount),
           messagesSize(messagesSize),
           timeout(TimeUtils::now() + boost::posix_time::milliseconds(sendTimeoutMs)),
-          sendCallback(std::move(callback)),
+          nonBatchSendCallback(std::move(callback)),
+          chunkedMessageId(chunkedMessageId),
+          sendArgs(new SendArguments(producerId, metadata.sequence_id(), metadata, payload)) {}
+
+    OpSendMsg(const proto::MessageMetadata& metadata, uint32_t messagesCount, uint64_t messagesSize,
+              int sendTimeoutMs, std::vector<SendCallback>&& callbacks,
+              ChunkMessageIdImplPtr chunkedMessageId, uint64_t producerId, SharedBuffer payload)
+        : result(ResultOk),
+          chunkId(metadata.chunk_id()),
+          numChunks(metadata.num_chunks_from_msg()),
+          messagesCount(messagesCount),
+          messagesSize(messagesSize),
+          timeout(TimeUtils::now() + boost::posix_time::milliseconds(sendTimeoutMs)),
+          batchSendCallbacks(std::move(callbacks)),
           chunkedMessageId(chunkedMessageId),
           sendArgs(new SendArguments(producerId, metadata.sequence_id(), metadata, payload)) {}
 };

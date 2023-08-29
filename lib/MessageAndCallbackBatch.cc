@@ -46,9 +46,8 @@ void MessageAndCallbackBatch::add(const Message& msg, SendCallback&& callback) {
 
 std::unique_ptr<OpSendMsg> MessageAndCallbackBatch::createOpSendMsg(
     uint64_t producerId, const ProducerConfiguration& producerConfig, MessageCrypto* crypto) {
-    auto callback = createSendCallback();
     if (empty()) {
-        return OpSendMsg::create(ResultOperationNotSupported, std::move(callback));
+        return OpSendMsg::create(ResultOperationNotSupported, std::move(callbacks_));
     }
 
     // The magic number 64 is just an estimated size increment after setting some fields of the
@@ -79,17 +78,17 @@ std::unique_ptr<OpSendMsg> MessageAndCallbackBatch::createOpSendMsg(
         SharedBuffer encryptedPayload;
         if (!crypto->encrypt(producerConfig.getEncryptionKeys(), producerConfig.getCryptoKeyReader(),
                              *metadata_, payload, encryptedPayload)) {
-            return OpSendMsg::create(ResultCryptoError, std::move(callback));
+            return OpSendMsg::create(ResultCryptoError, std::move(callbacks_));
         }
         payload = encryptedPayload;
     }
 
     if (payload.readableBytes() > ClientConnection::getMaxMessageSize()) {
-        return OpSendMsg::create(ResultMessageTooBig, std::move(callback));
+        return OpSendMsg::create(ResultMessageTooBig, std::move(callbacks_));
     }
 
     auto op = OpSendMsg::create(*metadata_, callbacks_.size(), messagesSize_, producerConfig.getSendTimeout(),
-                                std::move(callback), nullptr, producerId, payload);
+                                std::move(callbacks_), nullptr, producerId, payload);
     clear();
     return op;
 }
@@ -98,19 +97,6 @@ void MessageAndCallbackBatch::clear() {
     messages_.clear();
     callbacks_.clear();
     messagesSize_ = 0;
-}
-
-static void completeSendCallbacks(const std::vector<SendCallback>& callbacks, Result result,
-                                  const MessageId& id) {
-    int32_t numOfMessages = static_cast<int32_t>(callbacks.size());
-    for (int32_t i = 0; i < numOfMessages; i++) {
-        callbacks[i](result, MessageIdBuilder::from(id).batchIndex(i).batchSize(numOfMessages).build());
-    }
-}
-
-SendCallback MessageAndCallbackBatch::createSendCallback() const {
-    const auto& callbacks = callbacks_;
-    return [callbacks](Result result, const MessageId& id) { completeSendCallbacks(callbacks, result, id); };
 }
 
 }  // namespace pulsar

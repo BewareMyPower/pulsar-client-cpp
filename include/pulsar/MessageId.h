@@ -107,6 +107,7 @@ class PULSAR_PUBLIC MessageId {
     friend class MultiTopicsConsumerImpl;
     friend class UnAckedMessageTrackerEnabled;
     friend class BatchAcknowledgementTracker;
+    friend struct OpSendMsg;
     friend class PulsarWrapper;
     friend class PulsarFriend;
     friend class NegativeAcksTracker;
