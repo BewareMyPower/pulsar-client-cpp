@@ -22,6 +22,8 @@
 #include <pulsar/Client.h>
 
 #include <atomic>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <memory>
 
 #include "ConnectionPool.h"
@@ -126,6 +128,11 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     friend class PulsarFriend;
 
+    template <typename Function>
+    void dispatch(Function&& function) {
+        boost::asio::dispatch(pool_, function);
+    }
+
    private:
     void handleCreateProducer(const Result result, const LookupDataResultPtr partitionMetadata,
                               TopicNamePtr topicName, ProducerConfiguration conf,
@@ -176,6 +183,8 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
     ExecutorServiceProviderPtr ioExecutorProvider_;
     ExecutorServiceProviderPtr listenerExecutorProvider_;
     ExecutorServiceProviderPtr partitionListenerExecutorProvider_;
+    // TODO: make it configurable
+    boost::asio::thread_pool sendCallbackPool_{1};
 
     LookupServicePtr lookupServicePtr_;
     ConnectionPool pool_;

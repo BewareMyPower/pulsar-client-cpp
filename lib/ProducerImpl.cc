@@ -926,10 +926,23 @@ bool ProducerImpl::ackReceived(uint64_t sequenceId, MessageId& rawMessageId) {
     pendingMessagesQueue_.pop_front();
 
     lock.unlock();
-    try {
-        opSendMsg->complete(ResultOk, messageId);
-    } catch (const std::exception& e) {
-        LOG_ERROR(getName() << "Exception thrown from callback " << e.what());
+    auto client = client_.lock();
+    if (client) {
+        auto rawOpPtr{opSendMsg.release()};
+        client->dispatch([rawOpPtr, messageId] {
+            std::unique_ptr<OpSendMsg> opSendMsg{rawOpPtr};
+            try {
+                opSendMsg->complete(ResultOk, messageId);
+            } catch (const std::exception& e) {
+                LOG_ERROR("Exception thrown from callback " << e.what());
+            }
+        });
+    } else {
+        try {
+            opSendMsg->complete(ResultOk, messageId);
+        } catch (const std::exception& e) {
+            LOG_ERROR(getName() << "Exception thrown from callback " << e.what());
+        }
     }
     return true;
 }
