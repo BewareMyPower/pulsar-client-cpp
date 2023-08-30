@@ -60,7 +60,8 @@ bool BatchMessageKeyBasedContainer::add(const Message& msg, SendCallback&& callb
     const auto key = getKey(msg);
     auto it = batches_.find(getKey(msg));
     if (it == batches_.end()) {
-        it = batches_.emplace(key, static_cast<size_t>(producerConfig_.getBatchingMaxMessages())).first;
+        // Do not preallocate for key based batching in case there are many keys
+        it = batches_.emplace(key, 1).first;
     }
     it->second.add(msg, std::move(callback));
     updateStats(msg);
