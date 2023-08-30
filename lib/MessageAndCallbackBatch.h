@@ -24,15 +24,26 @@
 
 #include <atomic>
 #include <boost/noncopyable.hpp>
+#include <memory>
 #include <vector>
 
 namespace pulsar {
 
-class MessageImpl;
-using MessageImplPtr = std::shared_ptr<MessageImpl>;
+struct OpSendMsg;
+class MessageCrypto;
+using FlushCallback = std::function<void(Result)>;
 
-class MessageAndCallbackBatch : public boost::noncopyable {
+namespace proto {
+class MessageMetadata;
+}
+
+class MessageAndCallbackBatch final : public boost::noncopyable {
    public:
+    // This default constructor is added just to make this class able to be stored in a map
+    MessageAndCallbackBatch() = default;
+    MessageAndCallbackBatch(size_t capacity);
+    ~MessageAndCallbackBatch();
+
     // Wrapper methods of STL container
     bool empty() const noexcept { return callbacks_.empty(); }
     size_t size() const noexcept { return callbacks_.size(); }
@@ -43,42 +54,21 @@ class MessageAndCallbackBatch : public boost::noncopyable {
      * @param message
      * @callback the associated send callback
      */
-    void add(const Message& msg, const SendCallback& callback);
+    void add(const Message& msg, SendCallback&& callback);
 
-    /**
-     * Clear the internal stats
-     */
-    void clear();
+    std::unique_ptr<OpSendMsg> createOpSendMsg(uint64_t producerId,
+                                               const ProducerConfiguration& producerConfig,
+                                               MessageCrypto* crypto);
 
-    /**
-     * Complete all the callbacks with given parameters
-     *
-     * @param result this batch's send result
-     * @param id this batch's message id
-     */
-    void complete(Result result, const MessageId& id) const;
-
-    /**
-     * Create a single callback to trigger all the internal callbacks in order
-     * It's used when you want to clear and add new messages and callbacks but current callbacks need to be
-     * triggered later.
-     *
-     * @return the merged send callback
-     */
-    SendCallback createSendCallback() const;
-
-    const MessageImplPtr& msgImpl() const { return msgImpl_; }
     uint64_t sequenceId() const noexcept { return sequenceId_; }
 
-    uint32_t messagesCount() const { return messagesCount_; }
-    uint64_t messagesSize() const { return messagesSize_; }
+    void clear();
 
    private:
-    MessageImplPtr msgImpl_;
+    std::unique_ptr<proto::MessageMetadata> metadata_;
+    std::vector<Message> messages_;
     std::vector<SendCallback> callbacks_;
     std::atomic<uint64_t> sequenceId_{static_cast<uint64_t>(-1L)};
-
-    uint32_t messagesCount_{0};
     uint64_t messagesSize_{0ull};
 };
 

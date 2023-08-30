@@ -21,13 +21,14 @@
 #include <stdexcept>
 
 #include "LogUtils.h"
+#include "OpSendMsg.h"
 
 DECLARE_LOG_OBJECT()
 
 namespace pulsar {
 
 BatchMessageContainer::BatchMessageContainer(const ProducerImpl& producer)
-    : BatchMessageContainerBase(producer) {}
+    : BatchMessageContainerBase(producer), batch_(producerConfig_.getBatchingMaxMessages()) {}
 
 BatchMessageContainer::~BatchMessageContainer() {
     LOG_DEBUG(*this << " destructed");
@@ -35,9 +36,9 @@ BatchMessageContainer::~BatchMessageContainer() {
                                         << "] [averageBatchSize_ = " << averageBatchSize_ << "]");
 }
 
-bool BatchMessageContainer::add(const Message& msg, const SendCallback& callback) {
+bool BatchMessageContainer::add(const Message& msg, SendCallback&& callback) {
     LOG_DEBUG("Before add: " << *this << " [message = " << msg << "]");
-    batch_.add(msg, callback);
+    batch_.add(msg, std::move(callback));
     updateStats(msg);
     LOG_DEBUG("After add: " << *this);
     return isFull();
@@ -52,14 +53,13 @@ void BatchMessageContainer::clear() {
     LOG_DEBUG(*this << " clear() called");
 }
 
-Result BatchMessageContainer::createOpSendMsg(OpSendMsg& opSendMsg,
-                                              const FlushCallback& flushCallback) const {
-    return createOpSendMsgHelper(opSendMsg, flushCallback, batch_);
-}
-
-std::vector<Result> BatchMessageContainer::createOpSendMsgs(std::vector<OpSendMsg>& opSendMsgs,
-                                                            const FlushCallback& flushCallback) const {
-    throw std::runtime_error("createOpSendMsgs is not supported for BatchMessageContainer");
+std::unique_ptr<OpSendMsg> BatchMessageContainer::createOpSendMsg(const FlushCallback& flushCallback) {
+    auto op = createOpSendMsgHelper(batch_);
+    if (flushCallback) {
+        op->addTrackerCallback(flushCallback);
+    }
+    clear();
+    return op;
 }
 
 void BatchMessageContainer::serialize(std::ostream& os) const {

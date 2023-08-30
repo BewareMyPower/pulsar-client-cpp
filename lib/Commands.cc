@@ -32,6 +32,7 @@
 #include "ChunkMessageIdImpl.h"
 #include "LogUtils.h"
 #include "MessageImpl.h"
+#include "OpSendMsg.h"
 #include "PulsarApi.pb.h"
 #include "Url.h"
 #include "checksum/ChecksumProvider.h"
@@ -193,13 +194,13 @@ SharedBuffer Commands::newConsumerStats(uint64_t consumerId, uint64_t requestId)
     return buffer;
 }
 
-PairSharedBuffer Commands::newSend(SharedBuffer& headers, BaseCommand& cmd, uint64_t producerId,
-                                   uint64_t sequenceId, ChecksumType checksumType,
-                                   const proto::MessageMetadata& metadata, const SharedBuffer& payload) {
+PairSharedBuffer Commands::newSend(SharedBuffer& headers, BaseCommand& cmd, ChecksumType checksumType,
+                                   const SendArguments& args) {
     cmd.set_type(BaseCommand::SEND);
     CommandSend* send = cmd.mutable_send();
-    send->set_producer_id(producerId);
-    send->set_sequence_id(sequenceId);
+    send->set_producer_id(args.producerId);
+    send->set_sequence_id(args.sequenceId);
+    const auto& metadata = args.metadata;
     if (metadata.has_num_messages_in_batch()) {
         send->set_num_messages(metadata.num_messages_in_batch());
     }
@@ -210,8 +211,9 @@ PairSharedBuffer Commands::newSend(SharedBuffer& headers, BaseCommand& cmd, uint
     // / Wire format
     // [TOTAL_SIZE] [CMD_SIZE][CMD] [MAGIC_NUMBER][CHECKSUM] [METADATA_SIZE][METADATA] [PAYLOAD]
 
-    int cmdSize = cmd.ByteSize();
-    int msgMetadataSize = metadata.ByteSize();
+    int cmdSize = cmd.ByteSizeLong();
+    int msgMetadataSize = metadata.ByteSizeLong();
+    const auto& payload = args.payload;
     int payloadSize = payload.readableBytes();
 
     int magicAndChecksumLength = (Crc32c == (checksumType)) ? (2 + 4 /* magic + checksumLength*/) : 0;
@@ -837,7 +839,8 @@ void Commands::initBatchMessageMetadata(const Message& msg, pulsar::proto::Messa
 uint64_t Commands::serializeSingleMessageInBatchWithPayload(const Message& msg, SharedBuffer& batchPayLoad,
                                                             unsigned long maxMessageSizeInBytes) {
     const auto& msgMetadata = msg.impl_->metadata;
-    SingleMessageMetadata metadata;
+    thread_local SingleMessageMetadata metadata;
+    metadata.Clear();
     if (msgMetadata.has_partition_key()) {
         metadata.set_partition_key(msgMetadata.partition_key());
     }
@@ -866,7 +869,7 @@ uint64_t Commands::serializeSingleMessageInBatchWithPayload(const Message& msg, 
     int payloadSize = msg.impl_->payload.readableBytes();
     metadata.set_payload_size(payloadSize);
 
-    int msgMetadataSize = metadata.ByteSize();
+    auto msgMetadataSize = metadata.ByteSizeLong();
 
     unsigned long requiredSpace = sizeof(uint32_t) + msgMetadataSize + payloadSize;
     if (batchPayLoad.writableBytes() <= sizeof(uint32_t) + msgMetadataSize + payloadSize) {

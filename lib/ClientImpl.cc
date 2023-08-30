@@ -694,6 +694,7 @@ void ClientImpl::shutdown() {
         LOG_DEBUG(producers.size() << " producers and " << consumers.size()
                                    << " consumers have been shutdown.");
     }
+    sendCallbackPool_.stop();
     if (!pool_.close()) {
         // pool_ has already been closed. It means shutdown() has been called before.
         return;
