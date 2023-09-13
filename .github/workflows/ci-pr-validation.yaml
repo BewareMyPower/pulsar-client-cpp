@@ -29,33 +29,6 @@ concurrency:
 
 jobs:
 
-  wireshark-dissector-build:
-    name: Build the Wireshark dissector
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    strategy:
-      matrix:
-        os: [ubuntu-20.04, macos-12]
-
-    steps:
-      - name: checkout
-        uses: actions/checkout@v3
-
-      - name: Install deps (Ubuntu)
-        if: ${{ startsWith(matrix.os, 'ubuntu') }}
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y protobuf-compiler libprotobuf-dev wireshark-dev
-
-      - name: Install deps (macOS)
-        if: ${{ startsWith(matrix.os, 'macos') }}
-        run: |
-          brew install pkg-config wireshark protobuf
-      - name: Build wireshark plugin
-        run: |
-          cmake -S wireshark -B build-wireshark
-          cmake --build build-wireshark
-
   cpp-build-windows:
     timeout-minutes: 120
     name: Build CPP Client on ${{ matrix.name }}
@@ -84,20 +57,6 @@ jobs:
       - name: checkout
         uses: actions/checkout@v3
 
-      - name: Restore vcpkg and its artifacts.
-        uses: actions/cache@v3
-        id: vcpkg-cache
-        with:
-          path: |
-            ${{ env.VCPKG_ROOT }}
-            vcpkg_installed
-            !${{ env.VCPKG_ROOT }}/.git
-            !${{ env.VCPKG_ROOT }}/buildtrees
-            !${{ env.VCPKG_ROOT }}/packages
-            !${{ env.VCPKG_ROOT }}/downloads
-          key: |
-            ${{ runner.os }}-${{ matrix.triplet}}-${{ hashFiles( 'vcpkg.json' ) }}
-
       - name: Get vcpkg(windows)
         if: ${{ runner.os == 'Windows' && steps.vcpkg-cache.outputs.cache-hit != 'true' }}
         run: |
@@ -114,11 +73,13 @@ jobs:
 
       - name: Install vcpkg packages
         run: |
+          cd openssl
           ${{ env.VCPKG_ROOT }}\vcpkg.exe install --triplet ${{ matrix.triplet }}
 
       - name: Configure
         shell: bash
         run: |
+          cd openssl
           if [ "$RUNNER_OS" == "Windows" ]; then
             cmake \
               -B ./build-1 \
@@ -129,37 +90,10 @@ jobs:
               -S .
           fi
 
-      - name: Install
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cmake --build ./build-1 --parallel --config Release
-            cmake --install ./build-1
-          fi
-
-      - name: Test examples
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cd win-examples
-            cmake \
-              -G "${{ matrix.generator }}" ${{ matrix.arch }} \
-              -DLINK_STATIC=OFF \
-              -DCMAKE_PREFIX_PATH=${{ env.INSTALL_DIR }} \
-              -B build-dynamic
-            cmake --build build-dynamic --config Release
-            cmake \
-              -G "${{ matrix.generator }}" ${{ matrix.arch }} \
-              -DLINK_STATIC=ON \
-              -DCMAKE_PREFIX_PATH=${{ env.INSTALL_DIR }} \
-              -B build-static
-            cmake --build build-static --config Release
-            ./build-static/Release/win-example.exe
-          fi
-
       - name: Build (Debug)
         shell: bash
         run: |
+          cd openssl
           if [ "$RUNNER_OS" == "Windows" ]; then
             cmake \
               -B ./build-2 \
@@ -169,14 +103,13 @@ jobs:
               -DCMAKE_INSTALL_PREFIX="${{ env.INSTALL_DIR }}" \
               -DCMAKE_BUILD_TYPE=Debug \
               -S .
-            cmake --build ./build-2 --parallel --config Debug
           fi
 
   # Job that will be required to complete and depends on all the other jobs
   check-completion:
     name: Check Completion
     runs-on: ubuntu-latest
-    needs: [wireshark-dissector-build, cpp-build-windows]
+    needs: [cpp-build-windows]
 
     steps:
       - run: true

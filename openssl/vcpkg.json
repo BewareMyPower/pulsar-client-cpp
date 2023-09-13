@@ -1,0 +1,8 @@
+{
+  "name": "pulsar-cpp",
+  "version": "1.0.0",
+  "description": "Pulsar C++ SDK",
+  "dependencies": [
+    "openssl"
+  ]
+}
