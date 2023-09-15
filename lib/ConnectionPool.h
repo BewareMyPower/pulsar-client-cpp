@@ -51,6 +51,8 @@ class PULSAR_PUBLIC ConnectionPool {
      */
     bool close();
 
+    void remove(const std::string& key);
+
     /**
      * Get a connection from the pool.
      * <p>
@@ -78,7 +80,7 @@ class PULSAR_PUBLIC ConnectionPool {
     ClientConfiguration clientConfiguration_;
     ExecutorServiceProviderPtr executorProvider_;
     AuthenticationPtr authentication_;
-    typedef std::map<std::string, ClientConnectionWeakPtr> PoolMap;
+    typedef std::map<std::string, std::shared_ptr<ClientConnection>> PoolMap;
     PoolMap pool_;
     bool poolConnections_;
     const std::string clientVersion_;

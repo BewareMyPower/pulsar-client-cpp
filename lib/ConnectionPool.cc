@@ -51,9 +51,10 @@ bool ConnectionPool::close() {
     std::unique_lock<std::mutex> lock(mutex_);
     if (poolConnections_) {
         for (auto cnxIt = pool_.begin(); cnxIt != pool_.end(); cnxIt++) {
-            ClientConnectionPtr cnx = cnxIt->second.lock();
+            auto& cnx = cnxIt->second;
             if (cnx) {
-                cnx->close(ResultDisconnected);
+                // The 2nd argument is false because removing a value during the iteration will cause segfault
+                cnx->close(ResultDisconnected, false);
             }
         }
         pool_.clear();
@@ -74,17 +75,17 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(
     if (poolConnections_) {
         PoolMap::iterator cnxIt = pool_.find(logicalAddress);
         if (cnxIt != pool_.end()) {
-            ClientConnectionPtr cnx = cnxIt->second.lock();
+            auto& cnx = cnxIt->second;
 
-            if (cnx && !cnx->isClosed()) {
+            if (!cnx->isClosed()) {
                 // Found a valid or pending connection in the pool
                 LOG_DEBUG("Got connection from pool for " << logicalAddress << " use_count: "  //
-                                                          << (cnx.use_count() - 1) << " @ " << cnx.get());
+                                                          << (cnx.use_count()) << " @ " << cnx.get());
                 return cnx->getConnectFuture();
             } else {
                 // Deleting stale connection
                 LOG_INFO("Deleting stale connection from pool for "
-                         << logicalAddress << " use_count: " << (cnx.use_count() - 1) << " @ " << cnx.get());
+                         << logicalAddress << " use_count: " << (cnx.use_count()) << " @ " << cnx.get());
                 pool_.erase(logicalAddress);
             }
         }
@@ -94,7 +95,7 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(
     ClientConnectionPtr cnx;
     try {
         cnx.reset(new ClientConnection(logicalAddress, physicalAddress, executorProvider_->get(),
-                                       clientConfiguration_, authentication_, clientVersion_));
+                                       clientConfiguration_, authentication_, clientVersion_, *this));
     } catch (const std::runtime_error& e) {
         lock.unlock();
         LOG_ERROR("Failed to create connection: " << e.what())
@@ -112,6 +113,11 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(
 
     cnx->tcpConnectAsync();
     return future;
+}
+
+void ConnectionPool::remove(const std::string& key) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pool_.erase(key);
 }
 
 }  // namespace pulsar
