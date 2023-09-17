@@ -84,7 +84,7 @@ class PULSAR_PUBLIC ConnectionPool {
     PoolMap pool_;
     bool poolConnections_;
     const std::string clientVersion_;
-    mutable std::mutex mutex_;
+    mutable std::recursive_mutex mutex_;
     std::atomic_bool closed_{false};
 
     friend class PulsarFriend;

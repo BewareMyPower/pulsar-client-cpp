@@ -48,7 +48,7 @@ bool ConnectionPool::close() {
         return false;
     }
 
-    std::unique_lock<std::mutex> lock(mutex_);
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
     if (poolConnections_) {
         for (auto cnxIt = pool_.begin(); cnxIt != pool_.end(); cnxIt++) {
             auto& cnx = cnxIt->second;
@@ -70,7 +70,7 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(
         return promise.getFuture();
     }
 
-    std::unique_lock<std::mutex> lock(mutex_);
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
 
     if (poolConnections_) {
         PoolMap::iterator cnxIt = pool_.find(logicalAddress);
@@ -116,7 +116,7 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(
 }
 
 void ConnectionPool::remove(const std::string& key) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     pool_.erase(key);
 }
 
