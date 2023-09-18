@@ -710,6 +710,7 @@ void ClientConnection::processIncomingBuffer() {
                         self->handleRead(err, bytesTransferred, bytesToReceive);
                     }
                 }));
+            return;
         }
 
         // At this point,  we have at least one complete frame available in the buffer
