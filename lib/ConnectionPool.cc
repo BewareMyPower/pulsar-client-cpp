@@ -115,9 +115,13 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(
     return future;
 }
 
-void ConnectionPool::remove(const std::string& key) {
+void ConnectionPool::remove(const std::string& key, ClientConnection* value) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
-    pool_.erase(key);
+    auto it = pool_.find(key);
+    if (it->second.get() == value) {
+        LOG_INFO("Remove connection for " << key);
+        pool_.erase(it);
+    }
 }
 
 }  // namespace pulsar

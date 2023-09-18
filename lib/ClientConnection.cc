@@ -1330,6 +1330,10 @@ void ClientConnection::close(Result result, bool detach) {
     } else {
         LOG_INFO(cnxString_ << "Connection disconnected");
     }
+    // Remove the connection from the pool before completing any promise
+    if (detach) {
+        pool_.remove(logicalAddress_, this);  // trigger the destructor
+    }
 
     for (ProducersMap::iterator it = producers.begin(); it != producers.end(); ++it) {
         HandlerBase::handleDisconnection(result, shared_from_this(), it->second);
@@ -1357,9 +1361,6 @@ void ClientConnection::close(Result result, bool detach) {
     }
     for (auto& kv : pendingGetNamespaceTopicsRequests) {
         kv.second.setFailed(result);
-    }
-    if (detach) {
-        pool_.remove(logicalAddress_);  // trigger the destructor
     }
 }
 

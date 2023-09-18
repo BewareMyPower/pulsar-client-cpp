@@ -51,7 +51,7 @@ class PULSAR_PUBLIC ConnectionPool {
      */
     bool close();
 
-    void remove(const std::string& key);
+    void remove(const std::string& key, ClientConnection* value);
 
     /**
      * Get a connection from the pool.
