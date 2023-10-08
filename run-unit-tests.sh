@@ -46,7 +46,7 @@ docker compose -f tests/brokermetadata/docker-compose.yml down
 
 docker compose -f tests/chunkdedup/docker-compose.yml up -d
 until curl http://localhost:8080/metrics > /dev/null 2>&1 ; do sleep 1; done
-$CMAKE_BUILD_DIRECTORY/tests/ChunkDedupTest
+$CMAKE_BUILD_DIRECTORY/tests/ChunkDedupTest --gtest_repeat=10
 docker compose -f tests/chunkdedup/docker-compose.yml down
 
 ./pulsar-test-service-start.sh

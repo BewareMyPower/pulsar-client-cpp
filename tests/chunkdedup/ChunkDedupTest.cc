@@ -34,16 +34,17 @@ TEST(ChunkDedupTest, testSendChunks) {
     conf.setBatchingEnabled(false);
     conf.setChunkingEnabled(true);
     Producer producer;
-    ASSERT_EQ(ResultOk, client.createProducer("test-send-chunks", producer));
+    ASSERT_EQ(ResultOk, client.createProducer("test-send-chunks", conf, producer));
 
     Latch latch{1};
-    std::string value(102400 * 5, 'a');
+    std::string value(1024000 /* max message size */ * 5, 'a');
     producer.sendAsync(MessageBuilder().setContent(value).build(),
                        [&latch](Result result, const MessageId& msgId) {
                            LOG_INFO("Send to " << msgId << ": " << result);
                            latch.countdown();
                        });
     ASSERT_TRUE(latch.wait(std::chrono::seconds(3)));
+    client.close();
 }
 
 int main(int argc, char* argv[]) {
