@@ -41,11 +41,13 @@ docker compose -f tests/oauth2/docker-compose.yml down
 # Run BrokerMetadata tests
 docker compose -f tests/brokermetadata/docker-compose.yml up -d
 until curl http://localhost:8080/metrics > /dev/null 2>&1 ; do sleep 1; done
+sleep 5
 $CMAKE_BUILD_DIRECTORY/tests/BrokerMetadataTest
 docker compose -f tests/brokermetadata/docker-compose.yml down
 
 docker compose -f tests/chunkdedup/docker-compose.yml up -d
 until curl http://localhost:8080/metrics > /dev/null 2>&1 ; do sleep 1; done
+sleep 5
 $CMAKE_BUILD_DIRECTORY/tests/ChunkDedupTest --gtest_repeat=10
 docker compose -f tests/chunkdedup/docker-compose.yml down
 
