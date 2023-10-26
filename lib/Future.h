@@ -66,16 +66,19 @@ class InternalState {
     bool complete(Result result, const Type &value) {
         Status expected = Status::INITIAL;
         if (!status_.compare_exchange_strong(expected, Status::COMPLETING)) {
+            LOG_INFO("XYZ repeat complete");
             return false;
         }
 
         // Ensure if another thread calls `addListener` at the same time, that thread can get the value by
         // `get` before the existing listeners are executed
+        LOG_INFO("XYZ before complete");
         Lock lock{mutex_};
         result_ = result;
         value_ = value;
         status_ = COMPLETED;
         cond_.notify_all();
+        LOG_INFO("XYZ after complete");
 
         if (!listeners_.empty()) {
             auto listeners = std::move(listeners_);
