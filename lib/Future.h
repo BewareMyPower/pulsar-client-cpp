@@ -49,7 +49,7 @@ inline std::ostream &operator<<(std::ostream &os, Status status) {
             os << "COMPLETED";
             break;
         default:
-            os << "???";
+            os << std::to_string(status);
     }
     return os;
 }
@@ -129,7 +129,7 @@ class InternalState {
     decltype(listeners_.before_begin()) tailListener_{listeners_.before_begin()};
     Result result_;
     Type value_;
-    std::atomic<Status> status_;
+    std::atomic<Status> status_{INITIAL};
 };
 
 template <typename Result, typename Type>
