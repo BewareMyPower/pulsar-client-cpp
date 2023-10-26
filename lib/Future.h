@@ -30,6 +30,30 @@
 
 namespace pulsar {
 
+enum Status : uint8_t
+{
+    INITIAL,
+    COMPLETING,
+    COMPLETED
+};
+
+inline std::ostream &operator<<(std::ostream &os, Status status) {
+    switch (status) {
+        case INITIAL:
+            os << "INITIAL";
+            break;
+        case COMPLETING:
+            os << "COMPLETING";
+            break;
+        case COMPLETED:
+            os << "COMPLETED";
+            break;
+        default:
+            os << "???";
+    }
+    return os;
+}
+
 template <typename Result, typename Type>
 class InternalState {
     DECLARE_LOG_OBJECT()
@@ -37,13 +61,6 @@ class InternalState {
     using Listener = std::function<void(Result, const Type &)>;
     using Pair = std::pair<Result, Type>;
     using Lock = std::unique_lock<std::mutex>;
-
-    enum Status : uint8_t
-    {
-        INITIAL,
-        COMPLETING,
-        COMPLETED
-    };
 
     // NOTE: Add the constructor explicitly just to be compatible with GCC 4.8
     InternalState() {}
@@ -69,6 +86,7 @@ class InternalState {
             LOG_INFO(this << " XYZ repeat complete, expected: " << expected << ", status_" << status_.load());
             return false;
         }
+        LOG_INFO(this << " XYZ repeat complete, expected: " << expected << ", status_" << status_.load());
 
         // Ensure if another thread calls `addListener` at the same time, that thread can get the value by
         // `get` before the existing listeners are executed
