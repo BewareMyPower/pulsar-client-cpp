@@ -26,10 +26,13 @@
 #include <memory>
 #include <mutex>
 
+#include "LogUtils.h"
+
 namespace pulsar {
 
 template <typename Result, typename Type>
 class InternalState {
+    DECLARE_LOG_OBJECT()
    public:
     using Listener = std::function<void(Result, const Type &)>;
     using Pair = std::pair<Result, Type>;
@@ -51,9 +54,12 @@ class InternalState {
             auto result = result_;
             auto value = value_;
             lock.unlock();
+            LOG_INFO(this << " XYZ trigger listener directly " << result);
             listener(result, value);
         } else {
+            LOG_INFO(this << " XYZ before inserting listener");
             tailListener_ = listeners_.emplace_after(tailListener_, std::move(listener));
+            LOG_INFO(this << " XYZ after inserting listener");
         }
     }
 
@@ -75,8 +81,11 @@ class InternalState {
             auto listeners = std::move(listeners_);
             lock.unlock();
             for (auto &&listener : listeners) {
+                LOG_INFO(this << " XYZ trigger listener");
                 listener(result, value);
             }
+        } else {
+            LOG_INFO(this << " XYZ no listener");
         }
 
         return true;
@@ -88,6 +97,7 @@ class InternalState {
         Lock lock{mutex_};
         cond_.wait(lock, [this] { return completed(); });
         value = value_;
+        LOG_INFO(this << " XYZ get " << result_);
         return result_;
     }
 
