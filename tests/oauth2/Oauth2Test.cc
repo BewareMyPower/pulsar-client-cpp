@@ -81,6 +81,7 @@ static Result testCreateProducer(const std::string& privateKey) {
     ClientConfiguration conf;
     auto params = gCommonParams;
     params["private_key"] = privateKey;
+    conf.setLogger(new ConsoleLoggerFactory(Logger::LEVEL_DEBUG));
     conf.setAuth(AuthOauth2::create(params));
     Client client{"pulsar://localhost:6650", conf};
     Producer producer;
