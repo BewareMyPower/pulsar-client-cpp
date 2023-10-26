@@ -66,7 +66,7 @@ class InternalState {
     bool complete(Result result, const Type &value) {
         Status expected = Status::INITIAL;
         if (!status_.compare_exchange_strong(expected, Status::COMPLETING)) {
-            LOG_INFO("XYZ repeat complete");
+            LOG_INFO("XYZ repeat complete, expected: " << expected << ", status_" << status_.load());
             return false;
         }
 
