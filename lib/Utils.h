@@ -43,6 +43,7 @@ struct WaitForCallbackValue {
     WaitForCallbackValue(Promise<Result, T>& promise) : m_promise(promise) {}
 
     void operator()(Result result, const T& value) {
+        std::cout << "WaitForCallbackValue " << result << std::endl;
         if (result == ResultOk) {
             m_promise.setValue(value);
         } else {

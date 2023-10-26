@@ -308,7 +308,9 @@ void ClientConnection::handlePulsarConnected(const proto::CommandConnected& cmdC
 
     lock.unlock();
 
+    LOG_INFO(cnxString() << "XYZ ClientConnection before setValue " << this);
     connectPromise_.setValue(shared_from_this());
+    LOG_INFO(cnxString() << "XYZ ClientConnection after setValue " << this);
 
     if (serverProtocolVersion_ >= proto::v8) {
         startConsumerStatsTimer(std::vector<uint64_t>());

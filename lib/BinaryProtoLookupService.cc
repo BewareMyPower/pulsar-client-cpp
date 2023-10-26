@@ -129,6 +129,7 @@ void BinaryProtoLookupService::sendPartitionMetadataLookupRequest(const std::str
     }
     LookupDataResultPromisePtr lookupPromise = std::make_shared<LookupDataResultPromise>();
     uint64_t requestId = newRequestId();
+    LOG_INFO("XYZ sendPartitionMetadataLookupRequest req_id: " << requestId);
     conn->newPartitionedMetadataLookup(topicName, requestId, lookupPromise);
     lookupPromise->getFuture().addListener(std::bind(&BinaryProtoLookupService::handlePartitionMetadataLookup,
                                                      this, topicName, std::placeholders::_1,
