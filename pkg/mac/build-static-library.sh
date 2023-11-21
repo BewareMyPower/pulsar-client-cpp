@@ -161,6 +161,7 @@ if [ ! -f curl-${CURL_VERSION}/.done ]; then
               --disable-ldap \
               --without-brotli \
               --without-secure-transport \
+              --without-librtmp \
               --disable-ipv6 \
               --host=$ARCH-apple-darwin \
               --prefix=$PREFIX
