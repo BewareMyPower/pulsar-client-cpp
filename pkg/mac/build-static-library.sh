@@ -23,7 +23,7 @@ cd `dirname $0`
 
 pip3 install pyyaml
 
-MACOSX_DEPLOYMENT_TARGET=10.15
+MACOSX_DEPLOYMENT_TARGET=11.0
 if [[ -z ${ARCH} ]]; then
     ARCH=`uname -m`
 fi
@@ -101,7 +101,7 @@ if [ ! -f protobuf-${PROTOBUF_VERSION}/.done ]; then
     tar zxf protobuf-cpp-${PROTOBUF_VERSION}.tar.gz
     pushd protobuf-${PROTOBUF_VERSION}
       pushd cmake/
-        cmake -B build -DCMAKE_CXX_FLAGS="-fPIC -arch ${ARCH} -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
+        cmake -B build -DCMAKE_CXX_FLAGS="-fPIC -arch x86_64 --arch arm64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
             -Dprotobuf_BUILD_TESTS=OFF \
             -DCMAKE_INSTALL_PREFIX=$PREFIX
         cmake --build build -j16 --target install
