@@ -106,6 +106,12 @@ if [ ! -f protobuf-${PROTOBUF_VERSION}/.done ]; then
             -DCMAKE_INSTALL_PREFIX=$PREFIX
         cmake --build build -j16 --target install
       popd
+
+      pushd $PREFIX/lib
+        mv libprotobuf.a libprotobuf_universal.a
+        lipo libprotobuf_universal.a -thin ${ARCH} -output libprotobuf.a
+      popd
+
       touch .done
     popd
 else
@@ -173,7 +179,7 @@ cmake -B build-static -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET \
     -DBUILD_TESTS=OFF \
     -DBUILD_DYNAMIC_LIB=ON \
     -DBUILD_STATIC_LIB=ON \
-    -DCMAKE_OSX_ARCHITECTURES="${ARCH}" \
+    -DCMAKE_OSX_ARCHITECTURES=${ARCH} \
     -DCMAKE_PREFIX_PATH=$PREFIX \
     -DOPENSSL_ROOT_DIR=$PREFIX \
     -DPROTOC_PATH=$PREFIX/bin/protoc \
