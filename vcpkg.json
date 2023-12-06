@@ -77,7 +77,7 @@
     }
   ],
   "features": {
-    "test": {
+    "tests": {
       "description": "Build Tests",
       "dependencies": [
         {

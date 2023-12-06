@@ -43,3 +43,53 @@ message(STATUS "Pulsar Client version macro: ${PULSAR_CLIENT_VERSION_MACRO}")
 
 set(PVM_COMMENT "This is generated from Version.h.in by CMAKE. DO NOT EDIT DIRECTLY")
 configure_file(${ROOT_DIRECTORY}/templates/Version.h.in include/pulsar/Version.h @ONLY)
+
+option(BUILD_TESTS "Build tests" ON)
+if (BUILD_TESTS)
+    list(APPEND VCPKG_MANIFEST_FEATURES "tests")
+endif ()
+
+option(BUILD_PERF_TOOLS "Build Pulsar CLI perf producer/consumer" OFF)
+if (BUILD_PERF_TOOLS)
+    list(APPEND VCPKG_MANIFEST_FEATURES "perf")
+endif ()
+
+find_package(protobuf CONFIG REQUIRED)
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${ROOT_DIRECTORY}/proto/PulsarApi.proto)
+
+# TODO: Use add_subdirectory() to use short file names
+file(GLOB LIB_SOURCES ${ROOT_DIRECTORY}/lib/*.cc
+    ${ROOT_DIRECTORY}/c/*.cc
+    ${ROOT_DIRECTORY}/lz4/*.cc
+    ${ROOT_DIRECTORY}/checksum/*.cc
+    ${ROOT_DIRECTORY}/stats/*.cc
+    ${ROOT_DIRECTORY}/auth/*.cc
+    ${ROOT_DIRECTORY}/auth/athenz/*.cc
+)
+
+find_package(Boost REQUIRED)
+# TODO: find program_options for perf
+find_package(ZLIB REQUIRED)
+find_package(CURL REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(Snappy CONFIG REQUIRED)
+find_package(zstd CONFIG REQUIRED)
+
+add_library(pulsar ${LIB_SOURCES} ${PROTO_SRCS})
+target_include_directories(pulsar PRIVATE
+    ${ROOT_DIRECTORY}
+    ${ROOT_DIRECTORY}/include
+    ${CMAKE_BINARY_DIR}
+    ${CMAKE_BINARY_DIR}/include
+    )
+target_link_libraries(pulsar PRIVATE
+    Boost::boost
+    ZLIB::ZLIB
+    CURL::libcurl
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    protobuf::libprotobuf-lite
+    protobuf::libprotobuf
+    Snappy::snappy
+    zstd::libzstd_static
+    )
