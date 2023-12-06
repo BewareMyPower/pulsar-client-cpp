@@ -23,6 +23,7 @@ cmake_minimum_required(VERSION 3.13)
 set(ROOT_DIRECTORY "${CMAKE_SOURCE_DIR}/..")
 set(VCPKG_MANIFEST_DIR ${ROOT_DIRECTORY})
 set(CMAKE_TOOLCHAIN_FILE "${ROOT_DIRECTORY}/vcpkg/scripts/buildsystems/vcpkg.cmake")
+message("VCPKG_TARGET_TRIPLET: ${VCPKG_TARGET_TRIPLET}")
 project(pulsar-cpp CXX)
 
 if (NOT CMAKE_CXX_STANDARD)
@@ -85,11 +86,11 @@ target_include_directories(pulsar PRIVATE
 target_link_libraries(pulsar PRIVATE
     Boost::boost
     ZLIB::ZLIB
-    CURL::libcurl
     OpenSSL::SSL
     OpenSSL::Crypto
     protobuf::libprotobuf-lite
     protobuf::libprotobuf
     Snappy::snappy
     zstd::libzstd_static
+    CURL::libcurl
     )
