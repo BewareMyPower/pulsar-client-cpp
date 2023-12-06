@@ -1,29 +1,100 @@
 {
   "name": "pulsar-cpp",
-  "version": "2.8.0",
+  "version": "3.5.0",
   "description": "Pulsar C++ SDK",
   "dependencies": [
-    "boost-accumulators",
-    "boost-algorithm",
-    "boost-any",
-    "boost-circular-buffer",
-    "boost-asio",
-    "boost-date-time",
-    "boost-predef",
-    "boost-program-options",
-    "boost-property-tree",
-    "boost-random",
-    "boost-serialization",
-    "boost-xpressive",
-    "curl",
-    "openssl",
-    "protobuf",
-    "snappy",
-    "zlib",
-    "zstd",
+    {
+      "name": "boost-accumulators",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-algorithm",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-any",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-circular-buffer",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-asio",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-date-time",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-predef",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-property-tree",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-random",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-serialization",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "boost-xpressive",
+      "version>=": "1.80.0"
+    },
+    {
+      "name": "curl",
+      "version>=": "8.4.0"
+    },
+    {
+      "name": "openssl",
+      "version>=": "1.1.1n#1"
+    },
+    {
+      "name": "protobuf",
+      "version>=": "3.21.12"
+    },
+    {
+      "name": "snappy",
+      "version>=": "1.1.9"
+    },
+    {
+      "name": "zlib",
+      "version>=": "1.3"
+    },
+    {
+      "name": "zstd",
+      "version>=": "1.5.2"
+    },
     {
       "name": "dlfcn-win32",
       "platform": "windows"
     }
-  ]
+  ],
+  "features": {
+    "test": {
+      "description": "Build Tests",
+      "dependencies": [
+        {
+          "name": "gtest",
+          "version>=": "1.14.0"
+        }
+      ]
+    },
+    "perf": {
+      "description": "Build Performance Tool",
+      "dependencies": [
+        {
+          "name": "boost-program-options",
+          "version>=": "1.80.0"
+        }
+      ]
+    }
+  },
+  "builtin-baseline": "a69b65229b3956b7f45abd81671b7330114bcaad"
 }
