@@ -59,12 +59,12 @@ protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${ROOT_DIRECTORY}/proto/PulsarApi.pr
 
 # TODO: Use add_subdirectory() to use short file names
 file(GLOB LIB_SOURCES ${ROOT_DIRECTORY}/lib/*.cc
-    ${ROOT_DIRECTORY}/c/*.cc
-    ${ROOT_DIRECTORY}/lz4/*.cc
-    ${ROOT_DIRECTORY}/checksum/*.cc
-    ${ROOT_DIRECTORY}/stats/*.cc
-    ${ROOT_DIRECTORY}/auth/*.cc
-    ${ROOT_DIRECTORY}/auth/athenz/*.cc
+    ${ROOT_DIRECTORY}/lib/c/*.cc
+    ${ROOT_DIRECTORY}/lib/lz4/*.cc
+    ${ROOT_DIRECTORY}/lib/checksum/*.cc
+    ${ROOT_DIRECTORY}/lib/stats/*.cc
+    ${ROOT_DIRECTORY}/lib/auth/*.cc
+    ${ROOT_DIRECTORY}/lib/auth/athenz/*.cc
 )
 
 find_package(Boost REQUIRED)
