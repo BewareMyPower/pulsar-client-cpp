@@ -19,24 +19,29 @@
 
 file(GLOB PULSAR_SOURCES *.cc *.h lz4/*.cc lz4/*.h checksum/*.cc checksum/*.h stats/*.cc stats/*.h c/*.cc c/*.h auth/*.cc auth/*.h auth/athenz/*.cc auth/athenz/*.h)
 
-if (NOT PROTOC_PATH)
-    set(PROTOC_PATH protoc)
-endif()
-
 set(LIB_AUTOGEN_DIR ${AUTOGEN_DIR}/lib)
 file(MAKE_DIRECTORY ${LIB_AUTOGEN_DIR})
 include_directories(${LIB_AUTOGEN_DIR})
 
-# Protobuf generation is only supported natively starting from CMake 3.8
-# Using custom command for now
-set(PROTO_SOURCES ${LIB_AUTOGEN_DIR}/PulsarApi.pb.cc ${LIB_AUTOGEN_DIR}/PulsarApi.pb.h)
-set(PULSAR_SOURCES ${PULSAR_SOURCES} ${PROTO_SOURCES})
-ADD_CUSTOM_COMMAND(
-         OUTPUT ${PROTO_SOURCES}
-         COMMAND ${PROTOC_PATH} -I ../proto ../proto/PulsarApi.proto --cpp_out=${LIB_AUTOGEN_DIR}
-         DEPENDS
-         ../proto/PulsarApi.proto
-         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+if (PROTOC_PATH)
+    set(PROTO_SOURCES ${LIB_AUTOGEN_DIR}/PulsarApi.pb.cc ${LIB_AUTOGEN_DIR}/PulsarApi.pb.h)
+    set(PULSAR_SOURCES ${PULSAR_SOURCES} ${PROTO_SOURCES})
+    ADD_CUSTOM_COMMAND(
+             OUTPUT ${PROTO_SOURCES}
+             COMMAND ${PROTOC_PATH} -I ../proto ../proto/PulsarApi.proto --cpp_out=${LIB_AUTOGEN_DIR}
+             DEPENDS
+             ../proto/PulsarApi.proto
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+else ()
+    message(STATUS "PROTOC_PATH is not defined, run protobuf_generate")
+    add_library(proto-objects OBJECT "${CMAKE_SOURCE_DIR}/proto/PulsarApi.proto")
+    target_link_libraries(proto-objects PUBLIC protobuf::libprotobuf)
+    target_include_directories(proto-objects PUBLIC "${LIB_AUTOGEN_DIR}")
+    protobuf_generate(
+        TARGET proto-objects
+        IMPORT_DIRS "${CMAKE_SOURCE_DIR}/proto"
+        PROTOC_OUT_DIR "${LIB_AUTOGEN_DIR}")
+endif ()
 
 set(LIBRARY_VERSION $ENV{PULSAR_LIBRARY_VERSION})
 if (NOT LIBRARY_VERSION)

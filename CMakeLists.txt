@@ -19,6 +19,23 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+option(INTEGRATE_VCPKG "Integrate with Vcpkg" OFF)
+if (INTEGRATE_VCPKG)
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
+endif ()
+
+option(BUILD_TESTS "Build tests" ON)
+message(STATUS "BUILD_TESTS:  " ${BUILD_TESTS})
+if (BUILD_TESTS)
+    list(APPEND VCPKG_MANIFEST_FEATURES "tests")
+endif ()
+
+option(BUILD_PERF_TOOLS "Build Pulsar CLI perf producer/consumer" OFF)
+message(STATUS "BUILD_PERF_TOOLS:  " ${BUILD_PERF_TOOLS})
+if (BUILD_PERF_TOOLS)
+    list(APPEND VCPKG_MANIFEST_FEATURES "perf")
+endif ()
+
 project (pulsar-cpp)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake_modules")
 
@@ -70,12 +87,6 @@ MESSAGE(STATUS "BUILD_DYNAMIC_LIB:  " ${BUILD_DYNAMIC_LIB})
 
 option(BUILD_STATIC_LIB "Build static lib" ON)
 MESSAGE(STATUS "BUILD_STATIC_LIB:  " ${BUILD_STATIC_LIB})
-
-option(BUILD_TESTS "Build tests" ON)
-MESSAGE(STATUS "BUILD_TESTS:  " ${BUILD_TESTS})
-
-option(BUILD_PERF_TOOLS "Build Pulsar CLI perf producer/consumer" OFF)
-MESSAGE(STATUS "BUILD_PERF_TOOLS:  " ${BUILD_PERF_TOOLS})
 
 IF (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
