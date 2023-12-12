@@ -28,14 +28,13 @@ file(MAKE_DIRECTORY ${LIB_AUTOGEN_DIR})
 include_directories(${LIB_AUTOGEN_DIR})
 
 if (INTEGRATE_VCPKG)
-    message(STATUS "PROTOC_PATH is not defined, run protobuf_generate")
-    add_library(proto-objects OBJECT "${CMAKE_SOURCE_DIR}/proto/PulsarApi.proto")
-    target_link_libraries(proto-objects PUBLIC protobuf::libprotobuf)
-    target_include_directories(proto-objects PUBLIC "${LIB_AUTOGEN_DIR}")
+    add_library(PROTO_OBJECTS OBJECT "${CMAKE_SOURCE_DIR}/proto/PulsarApi.proto")
+    target_link_libraries(PROTO_OBJECTS PUBLIC protobuf::libprotobuf)
+    target_include_directories(PROTO_OBJECTS PUBLIC ${LIB_AUTOGEN_DIR})
     protobuf_generate(
-        TARGET proto-objects
-        IMPORT_DIRS "${CMAKE_SOURCE_DIR}/proto"
-        PROTOC_OUT_DIR "${LIB_AUTOGEN_DIR}")
+        TARGET PROTO_OBJECTS
+        IMPORT_DIRS ${CMAKE_SOURCE_DIR}/proto
+        PROTOC_OUT_DIR ${LIB_AUTOGEN_DIR})
 else ()
     set(PROTO_SOURCES ${LIB_AUTOGEN_DIR}/PulsarApi.pb.cc ${LIB_AUTOGEN_DIR}/PulsarApi.pb.h)
     set(PULSAR_SOURCES ${PULSAR_SOURCES} ${PROTO_SOURCES})
@@ -73,17 +72,17 @@ target_include_directories(PULSAR_OBJECT_LIB PUBLIC
     "${CMAKE_SOURCE_DIR}/include"
     "${CMAKE_BINARY_DIR}/include")
 if (INTEGRATE_VCPKG)
-    target_link_libraries(PULSAR_OBJECT_LIB PRIVATE proto-objects)
+    target_link_libraries(PULSAR_OBJECT_LIB PRIVATE PROTO_OBJECTS)
 endif ()
 
 if (BUILD_DYNAMIC_LIB)
     add_library(pulsarShared SHARED $<TARGET_OBJECTS:PULSAR_OBJECT_LIB>)
     set_property(TARGET pulsarShared PROPERTY OUTPUT_NAME ${LIB_NAME_SHARED})
     set_property(TARGET pulsarShared PROPERTY VERSION ${LIBRARY_VERSION})
-    target_link_libraries(pulsarShared PRIVATE ${COMMON_LIBS} ${CMAKE_DL_LIBS} proto-objects)
+    target_link_libraries(pulsarShared PRIVATE ${COMMON_LIBS} ${CMAKE_DL_LIBS} PROTO_OBJECTS)
     target_include_directories(pulsarShared PUBLIC
-        "${CMAKE_SOURCE_DIR}"
-        "${CMAKE_SOURCE_DIR}/include")
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/include)
     target_link_directories(pulsarShared PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
     if (MSVC)
         target_include_directories(pulsarShared PRIVATE ${dlfcn-win32_INCLUDE_DIRS})
@@ -99,7 +98,11 @@ endif()
 
 if (BUILD_STATIC_LIB)
     add_library(pulsarStatic STATIC $<TARGET_OBJECTS:PULSAR_OBJECT_LIB>)
-    target_link_libraries(pulsarStatic proto-objects)
+    target_link_libraries(pulsarStatic PROTO_OBJECTS)
+    target_include_directories(pulsarStatic PUBLIC
+        ${CMAKE_BINARY_DIR}/include
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/include)
     if (MSVC)
         set_property(TARGET pulsarStatic PROPERTY OUTPUT_NAME "${LIB_NAME}-static")
         target_include_directories(pulsarStatic PRIVATE ${dlfcn-win32_INCLUDE_DIRS})
