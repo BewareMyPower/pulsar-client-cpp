@@ -441,7 +441,9 @@ class BinaryProtoLookupServiceRedirectTestHelper : public BinaryProtoLookupServi
 
     LookupResultFuture findBroker(const std::string& address, bool authoritative, const std::string& topic,
                                   size_t redirectCount) {
-        return BinaryProtoLookupService::findBroker(address, authoritative, topic, redirectCount);
+        Promise<Result, LookupResult> promise;
+        BinaryProtoLookupService::findBroker(address, authoritative, topic, redirectCount, promise);
+        return promise.getFuture();
     }
 };  // class BinaryProtoLookupServiceRedirectTestHelper
 

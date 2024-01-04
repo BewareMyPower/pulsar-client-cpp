@@ -55,9 +55,10 @@ class PULSAR_PUBLIC BinaryProtoLookupService : public LookupService {
     Future<Result, SchemaInfo> getSchema(const TopicNamePtr& topicName, const std::string& version) override;
 
    protected:
+    using LookupResultPromise = Promise<Result, LookupResult>;
     // Mark findBroker as protected to make it accessible from test.
-    LookupResultFuture findBroker(const std::string& address, bool authoritative, const std::string& topic,
-                                  size_t redirectCount);
+    void findBroker(const std::string& address, bool authoritative, const std::string& topic,
+                    size_t redirectCount, LookupResultPromise promise);
 
    private:
     std::mutex mutex_;
