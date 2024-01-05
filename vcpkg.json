@@ -41,10 +41,6 @@
       "version>=": "1.83.0"
     },
     {
-      "name": "boost-xpressive",
-      "version>=": "1.83.0"
-    },
-    {
       "name": "curl",
       "default-features": false,
       "features": [
