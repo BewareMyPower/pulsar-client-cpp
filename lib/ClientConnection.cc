@@ -34,7 +34,6 @@
 #include "PulsarApi.pb.h"
 #include "ResultUtils.h"
 #include "Url.h"
-#include "asio/error_code.hpp"
 #include "auth/AuthOauth2.h"
 #include "auth/InitialAuthData.h"
 #include "checksum/ChecksumProvider.h"

@@ -6,6 +6,9 @@
   "dependencies": [
     {
       "name": "asio",
+      "features": [
+        "openssl"
+      ],
       "version>=": "1.28.2"
     },
     {
