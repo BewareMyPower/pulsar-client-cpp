@@ -5,11 +5,11 @@
   "builtin-baseline": "b051745c68faa6f65c493371d564c4eb8af34dad",
   "dependencies": [
     {
-      "name": "boost-accumulators",
-      "version>=": "1.83.0"
+      "name": "asio",
+      "version>=": "1.28.2"
     },
     {
-      "name": "boost-asio",
+      "name": "boost-accumulators",
       "version>=": "1.83.0"
     },
     {
