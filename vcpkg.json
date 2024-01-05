@@ -25,10 +25,6 @@
       "version>=": "1.83.0"
     },
     {
-      "name": "boost-date-time",
-      "version>=": "1.83.0"
-    },
-    {
       "name": "boost-predef",
       "version>=": "1.83.0"
     },
