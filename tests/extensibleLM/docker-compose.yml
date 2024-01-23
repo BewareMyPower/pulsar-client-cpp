@@ -10,8 +10,6 @@ services:
     restart: on-failure
     networks:
       - pulsar
-    volumes:
-      - ./data/zookeeper:/pulsar/data/zookeeper
     environment:
       - metadataStoreUrl=zk:zookeeper:2181
       - PULSAR_MEM=-Xms128m -Xmx128m -XX:MaxDirectMemorySize=56m
@@ -63,8 +61,6 @@ services:
         condition: service_healthy
       pulsar-init:
         condition: service_completed_successfully
-    volumes:
-      - ./data/bookkeeper:/pulsar/data/bookkeeper
     command: bash -c "bin/apply-config-from-env.py conf/bookkeeper.conf && exec bin/pulsar bookie"
 
   proxy:
