@@ -29,23 +29,43 @@ concurrency:
 
 jobs:
 
-  cpp-build-macos-static:
-    timeout-minutes: 120
-    name: Build CPP Client on macOS with static dependencies
-    runs-on: macos-12
+  package:
+    name: Build ${{matrix.pkg.name}} ${{matrix.cpu.platform}}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 500
+
+    strategy:
+      fail-fast: true
+      matrix:
+        pkg:
+          - { name: 'RPM', type: 'rpm', path: 'pkg/rpm/RPMS' }
+        cpu:
+          - { arch: 'x86_64', platform: 'x86_64' }
+
     steps:
       - name: checkout
         uses: actions/checkout@v3
 
-      - name: Build libraries
-        run: ./pkg/mac/build-static-library.sh
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
 
-      - name: Test static libraries
-        run: |
-          export PULSAR_DIR=$PWD/pkg/mac/.install
-          echo "Build with static library"
-          clang++ win-examples/example.cc -o static.out -std=c++11 -I $PULSAR_DIR/include $PULSAR_DIR/lib/libpulsarwithdeps.a
-          ./static.out
-          echo "Build with dynamic library"
-          clang++ win-examples/example.cc -o dynamic.out -std=c++11 -I $PULSAR_DIR/include -L $PULSAR_DIR/lib -Wl,-rpath $PULSAR_DIR/lib -lpulsar
-          ./dynamic.out
+      - name: Package Pulsar source
+        run: build-support/generate-source-archive.sh
+
+      - uses: docker/setup-buildx-action@v2
+      - run: build-support/copy-deps-versionfile.sh
+
+      - name: Build dependencies Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./pkg/${{matrix.pkg.type}}
+          load: true
+          tags: build:latest
+          platforms: linux/${{matrix.cpu.platform}}
+          build-args: PLATFORM=${{matrix.cpu.arch}}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build packages
+        run: pkg/${{matrix.pkg.type}}/docker-build-${{matrix.pkg.type}}-${{matrix.cpu.platform}}.sh build:latest
+
