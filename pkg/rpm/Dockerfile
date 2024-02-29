@@ -46,7 +46,7 @@ RUN BOOST_VERSION=$(dep-version.py boost) && \
     tar zxf boost-${BOOST_VERSION}.tar.gz && \
     cd boost-${BOOST_VERSION} && \
     ./bootstrap.sh --with-libraries=regex && \
-    ./b2 address-model=64 cxxflags=-fPIC link=static threading=multi variant=release install && \
+    ./b2 address-model=64 cxxflags="-fPIC -std=c++11" link=static threading=multi variant=release install && \
     rm -rf /boost-${BOOST_VERSION}.tar.gz /boost-${BOOST_VERSION}
 
 RUN CMAKE_VERSION=$(dep-version.py cmake) && \
