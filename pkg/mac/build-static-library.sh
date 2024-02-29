@@ -142,7 +142,7 @@ if [ ! -f snappy-${SNAPPY_VERSION}/.done ]; then
     pushd snappy-${SNAPPY_VERSION}
       CXXFLAGS="-fPIC -O3 -Wno-error=sign-compare -arch ${ARCH} -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
           cmake . -DCMAKE_INSTALL_PREFIX=$PREFIX -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
-      make -j16
+      make VERBOSE=1
       make install
       touch .done
     popd
