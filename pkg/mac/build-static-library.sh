@@ -140,8 +140,8 @@ if [ ! -f snappy-${SNAPPY_VERSION}/.done ]; then
     curl -O -L https://github.com/google/snappy/archive/refs/tags/${SNAPPY_VERSION}.tar.gz
     tar zxf ${SNAPPY_VERSION}.tar.gz
     pushd snappy-${SNAPPY_VERSION}
-      CXXFLAGS="-fPIC -O3 -Wno-error=sign-compare -arch ${ARCH} -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
-          cmake . -DCMAKE_INSTALL_PREFIX=$PREFIX -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
+      cmake . -DCMAKE_CXX_FLAGS="-fPIC -O3 -Wno-error=sign-compare -arch ${ARCH} -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
+          -DCMAKE_INSTALL_PREFIX=$PREFIX -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
       make VERBOSE=1
       make install
       touch .done
