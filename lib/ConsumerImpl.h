@@ -75,6 +75,13 @@ const static std::string SYSTEM_PROPERTY_REAL_TOPIC = "REAL_TOPIC";
 const static std::string PROPERTY_ORIGIN_MESSAGE_ID = "ORIGIN_MESSAGE_ID";
 const static std::string DLQ_GROUP_TOPIC_SUFFIX = "-DLQ";
 
+enum class SeekStatus : std::uint8_t
+{
+    NOT_STARTED,
+    IN_PROGRESS,
+    COMPLETED
+};
+
 class ConsumerImpl : public ConsumerImplBase {
    public:
     ConsumerImpl(const ClientImplPtr client, const std::string& topic, const std::string& subscriptionName,
@@ -174,8 +181,8 @@ class ConsumerImpl : public ConsumerImplBase {
     void drainIncomingMessageQueue(size_t count);
     uint32_t receiveIndividualMessagesFromBatch(const ClientConnectionPtr& cnx, Message& batchedMessage,
                                                 const BitSet& ackSet, int redeliveryCount);
-    bool isPriorBatchIndex(int32_t idx);
-    bool isPriorEntryIndex(int64_t idx);
+    bool isPriorBatchIndex(int32_t idx, const MessageId& startMessageId);
+    bool isPriorEntryIndex(int64_t idx, const MessageId& startMessageId);
     void brokerConsumerStatsListener(Result, BrokerConsumerStatsImpl, BrokerConsumerStatsCallback);
 
     bool decryptMessageIfNeeded(const ClientConnectionPtr& cnx, const proto::CommandMessage& msg,
@@ -193,6 +200,7 @@ class ConsumerImpl : public ConsumerImplBase {
                                        const DeadlineTimerPtr& timer,
                                        BrokerGetLastMessageIdCallback callback);
 
+    // This method must be called when `mutexForMessageId_` is held
     boost::optional<MessageId> clearReceiveQueue();
     void seekAsyncInternal(long requestId, SharedBuffer seek, const MessageId& seekId, long timestamp,
                            ResultCallback callback);
@@ -234,14 +242,16 @@ class ConsumerImpl : public ConsumerImplBase {
     std::shared_ptr<Promise<Result, Producer>> deadLetterProducer_;
     std::mutex createProducerLock_;
 
-    // Make the access to `lastDequedMessageId_` and `lastMessageIdInBroker_` thread safe
+    // Make the access to `startMessageId_`, `lastDequedMessageId_` and `lastMessageIdInBroker_` thread safe
     mutable std::mutex mutexForMessageId_;
+    boost::optional<MessageId> startMessageId_;
     MessageId lastDequedMessageId_{MessageId::earliest()};
     MessageId lastMessageIdInBroker_{MessageId::earliest()};
 
-    std::atomic_bool duringSeek_{false};
-    Synchronized<boost::optional<MessageId>> startMessageId_;
-    Synchronized<MessageId> seekMessageId_{MessageId::earliest()};
+    mutable std::mutex mutexForSeek_;
+    SeekStatus seekStatus_{SeekStatus::NOT_STARTED};
+    MessageId seekMessageId_{MessageId::earliest()};
+    ResultCallback seekCallback_{nullptr};
 
     class ChunkedMessageCtx {
        public:
@@ -331,6 +341,38 @@ class ConsumerImpl : public ConsumerImplBase {
                                                       const proto::MessageMetadata& metadata,
                                                       const proto::MessageIdData& messageIdData,
                                                       const ClientConnectionPtr& cnx, MessageId& messageId);
+
+    Future<Result, GetLastMessageIdResponse> getLastMessageIdAsync() {
+        Promise<Result, GetLastMessageIdResponse> promise;
+        getLastMessageIdAsync([promise](Result result, const GetLastMessageIdResponse& response) {
+            if (result == ResultOk) {
+                promise.setValue(response);
+            } else {
+                promise.setFailed(result);
+            }
+        });
+        return promise.getFuture();
+    }
+
+    // This method must be called when mutexForMessageId_ is held
+    bool hasMoreMessages() const {
+        if (lastMessageIdInBroker_.entryId() == -1L) {
+            // Need to get last message ID from broker
+            return false;
+        }
+        if (lastDequedMessageId_ == MessageId::earliest()) {
+            // No message is received, compare with the start message ID
+            auto startMessageId = startMessageId_.value_or(MessageId::latest());
+            // TODO: we need to wait until startMessageId becomes latest
+            if (config_.isStartMessageIdInclusive()) {
+                return lastMessageIdInBroker_ >= startMessageId;
+            } else {
+                return lastMessageIdInBroker_ > startMessageId;
+            }
+        } else {
+            return lastMessageIdInBroker_ > lastDequedMessageId_;
+        }
+    }
 
     friend class PulsarFriend;
     friend class MultiTopicsConsumerImpl;

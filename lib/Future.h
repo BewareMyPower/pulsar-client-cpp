@@ -118,6 +118,14 @@ class Future {
 
     static Future<Result, Type> failed(Result result);
 
+    template <typename U, typename Func>
+#if __cplusplus >= 202002L
+    requires requires(Type &&t, U &u, Func &&func) {
+        u = func(std::forward<Type>(t));
+    }
+#endif
+    Future<Result, U> thenApply(Func &&func);
+
    private:
     InternalStatePtr<Result, Type> state_;
 
@@ -150,6 +158,25 @@ template <typename Result, typename Type>
 inline Future<Result, Type> Future<Result, Type>::failed(Result result) {
     Promise<Result, Type> promise;
     promise.setFailed(result);
+    return promise.getFuture();
+}
+
+template <typename Result, typename T>
+template <typename U, typename Func>
+#if __cplusplus >= 202002L
+requires requires(T &&t, U &u, Func &&func) {
+    u = func(std::forward<T>(t));
+}
+#endif
+inline Future<Result, U> Future<Result, T>::thenApply(Func &&func) {
+    Promise<Result, U> promise;
+    addListener([func, promise](Result result, const T &value) {
+        if (result == Result{}) {
+            promise.setValue(func(value));
+        } else {
+            promise.setFailed(result);
+        }
+    });
     return promise.getFuture();
 }
 
