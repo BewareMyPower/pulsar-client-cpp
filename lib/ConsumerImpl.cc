@@ -605,7 +605,7 @@ void ConsumerImpl::messageReceived(const ClientConnectionPtr& cnx, const proto::
         if (isPersistent_ && startMessageId &&
             m.getMessageId().ledgerId() == startMessageId.value().ledgerId() &&
             m.getMessageId().entryId() == startMessageId.value().entryId() &&
-            isPriorEntryIndex(m.getMessageId().entryId(), startMessageId.value())) {
+            isPriorEntryIndex(m.getMessageId().entryId())) {
             LOG_DEBUG(getName() << " Ignoring message from before the startMessageId: "
                                 << startMessageId.value());
             return;
@@ -759,7 +759,7 @@ uint32_t ConsumerImpl::receiveIndividualMessagesFromBatch(const ClientConnection
             // to the startMessageId
             if (isPersistent_ && msgId.ledgerId() == startMessageId.value().ledgerId() &&
                 msgId.entryId() == startMessageId.value().entryId() &&
-                isPriorBatchIndex(msgId.batchIndex(), startMessageId.value())) {
+                isPriorBatchIndex(msgId.batchIndex())) {
                 LOG_DEBUG(getName() << "Ignoring message from before the startMessageId"
                                     << msg.getMessageId());
                 ++skippedMessages;
@@ -1737,14 +1737,14 @@ void ConsumerImpl::seekAsyncInternal(long requestId, SharedBuffer seek, const Me
         });
 }
 
-bool ConsumerImpl::isPriorBatchIndex(int32_t idx, const MessageId& startMessageId) {
-    return config_.isStartMessageIdInclusive() ? idx < startMessageId.batchIndex()
-                                               : idx <= startMessageId.batchIndex();
+bool ConsumerImpl::isPriorBatchIndex(int32_t idx) {
+    return config_.isStartMessageIdInclusive() ? idx < startMessageId_.get().value().batchIndex()
+                                               : idx <= startMessageId_.get().value().batchIndex();
 }
 
-bool ConsumerImpl::isPriorEntryIndex(int64_t idx, const MessageId& startMessageId) {
-    return config_.isStartMessageIdInclusive() ? idx < startMessageId.entryId()
-                                               : idx <= startMessageId.entryId();
+bool ConsumerImpl::isPriorEntryIndex(int64_t idx) {
+    return config_.isStartMessageIdInclusive() ? idx < startMessageId_.get().value().entryId()
+                                               : idx <= startMessageId_.get().value().entryId();
 }
 
 bool ConsumerImpl::hasEnoughMessagesForBatchReceive() const {

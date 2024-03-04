@@ -181,8 +181,8 @@ class ConsumerImpl : public ConsumerImplBase {
     void drainIncomingMessageQueue(size_t count);
     uint32_t receiveIndividualMessagesFromBatch(const ClientConnectionPtr& cnx, Message& batchedMessage,
                                                 const BitSet& ackSet, int redeliveryCount);
-    bool isPriorBatchIndex(int32_t idx, const MessageId& startMessageId);
-    bool isPriorEntryIndex(int64_t idx, const MessageId& startMessageId);
+    bool isPriorBatchIndex(int32_t idx);
+    bool isPriorEntryIndex(int64_t idx);
     void brokerConsumerStatsListener(Result, BrokerConsumerStatsImpl, BrokerConsumerStatsCallback);
 
     bool decryptMessageIfNeeded(const ClientConnectionPtr& cnx, const proto::CommandMessage& msg,
