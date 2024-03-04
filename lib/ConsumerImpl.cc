@@ -257,7 +257,6 @@ Future<Result, bool> ConsumerImpl::connectionOpened(const ClientConnectionPtr& c
         }
     } else {
         seekLock.unlock();
-        std::lock_guard<std::mutex> lockForMessageId(mutexForMessageId_);
         startMessageId_ = clearReceiveQueue();
     }
 
@@ -1039,10 +1038,7 @@ Result ConsumerImpl::receiveHelper(Message& msg, int timeout) {
 }
 
 void ConsumerImpl::messageProcessed(Message& msg, bool track) {
-    Lock lock(mutexForMessageId_);
     lastDequedMessageId_ = msg.getMessageId();
-    lock.unlock();
-
     incomingMessagesSize_.fetch_sub(msg.getLength());
 
     ClientConnectionPtr currentCnx = getCnx().lock();
@@ -1084,15 +1080,12 @@ boost::optional<MessageId> ConsumerImpl::clearReceiveQueue() {
                                            .entryId(nextMessageId.entryId() - 1)
                                            .build();
         return previousMessageId;
-    } else if (lastDequedMessageId_ != MessageId::earliest()) {
+    } else {
         // If the queue was empty we need to restart from the message just after the last one that has been
         // dequeued
         // in the past
-        return lastDequedMessageId_;
-    } else {
-        // No message was received or dequeued by this consumer. Next message would still be the
-        // startMessageId
-        return startMessageId_.get();
+        const auto lastDequedMessageId = lastDequedMessageId_.get();
+        return (lastDequedMessageId == MessageId::earliest()) ? startMessageId_.get() : lastDequedMessageId;
     }
 }
 
@@ -1513,9 +1506,7 @@ void ConsumerImpl::seekAsync(uint64_t timestamp, ResultCallback callback) {
 bool ConsumerImpl::isReadCompacted() { return readCompacted_; }
 
 void ConsumerImpl::hasMessageAvailableAsync(HasMessageAvailableCallback callback) {
-    Lock lock(mutexForMessageId_);
-    const auto lastDequedMessageId = lastDequedMessageId_;
-    lock.unlock();
+    const auto lastDequedMessageId = lastDequedMessageId_.get();
 
     if (lastDequedMessageId == MessageId::earliest() &&
         startMessageId_.get().value_or(MessageId::earliest()) == MessageId::latest()) {
@@ -1551,7 +1542,6 @@ void ConsumerImpl::hasMessageAvailableAsync(HasMessageAvailableCallback callback
         });
     } else {
         if (hasMoreMessages()) {
-            lock.unlock();
             callback(ResultOk, true);
             return;
         }
@@ -1596,9 +1586,7 @@ void ConsumerImpl::internalGetLastMessageIdAsync(const BackoffPtr& backoff, Time
                 .addListener([this, self, callback](Result result, const GetLastMessageIdResponse& response) {
                     if (result == ResultOk) {
                         LOG_DEBUG(getName() << "getLastMessageId: " << response);
-                        Lock lock(mutexForMessageId_);
                         lastMessageIdInBroker_ = response.getLastMessageId();
-                        lock.unlock();
                     } else {
                         LOG_ERROR(getName() << "Failed to getLastMessageId: " << result);
                     }
@@ -1722,7 +1710,6 @@ void ConsumerImpl::seekAsyncInternal(long requestId, SharedBuffer seek, const Me
                     seekStatus_ = SeekStatus::COMPLETED;
                 }
 
-                std::lock_guard<std::mutex> lock{mutexForMessageId_};
                 lastDequedMessageId_ = MessageId::earliest();
             } else {
                 LOG_ERROR(getName() << "Failed to seek " << std::make_pair(originalSeekMessageId, timestamp)

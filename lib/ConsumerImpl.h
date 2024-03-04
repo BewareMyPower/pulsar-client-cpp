@@ -200,7 +200,6 @@ class ConsumerImpl : public ConsumerImplBase {
                                        const DeadlineTimerPtr& timer,
                                        BrokerGetLastMessageIdCallback callback);
 
-    // This method must be called when `mutexForMessageId_` is held
     boost::optional<MessageId> clearReceiveQueue();
     void seekAsyncInternal(long requestId, SharedBuffer seek, const MessageId& seekId, long timestamp,
                            ResultCallback callback);
@@ -242,10 +241,8 @@ class ConsumerImpl : public ConsumerImplBase {
     std::shared_ptr<Promise<Result, Producer>> deadLetterProducer_;
     std::mutex createProducerLock_;
 
-    // Make the access to `lastDequedMessageId_` and `lastMessageIdInBroker_` thread safe
-    mutable std::mutex mutexForMessageId_;
-    MessageId lastDequedMessageId_{MessageId::earliest()};
-    MessageId lastMessageIdInBroker_{MessageId::earliest()};
+    Synchronized<MessageId> lastDequedMessageId_{MessageId::earliest()};
+    Synchronized<MessageId> lastMessageIdInBroker_{MessageId::earliest()};
 
     mutable std::mutex mutexForSeek_;
     SeekStatus seekStatus_{SeekStatus::NOT_STARTED};
@@ -355,21 +352,22 @@ class ConsumerImpl : public ConsumerImplBase {
     }
 
     bool hasMoreMessages() const {
-        std::lock_guard<std::mutex> lock{mutexForMessageId_};
-        if (lastMessageIdInBroker_.entryId() == -1L) {
+        const auto lastMessageIdInBroker = lastMessageIdInBroker_.get();
+        if (lastMessageIdInBroker.entryId() == -1L) {
             // Need to get last message ID from broker
             return false;
         }
-        if (lastDequedMessageId_ == MessageId::earliest()) {
+        const auto lastDequedMessageId = lastMessageIdInBroker_.get();
+        if (lastDequedMessageId == MessageId::earliest()) {
             // No message is received, compare with the start message ID
-            auto startMessageId = startMessageId_.get().value_or(MessageId::latest());
+            const auto startMessageId = startMessageId_.get().value_or(MessageId::latest());
             if (config_.isStartMessageIdInclusive()) {
-                return lastMessageIdInBroker_ >= startMessageId;
+                return lastMessageIdInBroker >= startMessageId;
             } else {
-                return lastMessageIdInBroker_ > startMessageId;
+                return lastMessageIdInBroker > startMessageId;
             }
         } else {
-            return lastMessageIdInBroker_ > lastDequedMessageId_;
+            return lastMessageIdInBroker > lastDequedMessageId;
         }
     }
 
