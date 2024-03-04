@@ -354,8 +354,8 @@ class ConsumerImpl : public ConsumerImplBase {
         return promise.getFuture();
     }
 
-    // This method must be called when mutexForMessageId_ is held
     bool hasMoreMessages() const {
+        std::lock_guard<std::mutex> lock{mutexForMessageId_};
         if (lastMessageIdInBroker_.entryId() == -1L) {
             // Need to get last message ID from broker
             return false;
