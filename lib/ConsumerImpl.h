@@ -242,14 +242,14 @@ class ConsumerImpl : public ConsumerImplBase {
     std::shared_ptr<Promise<Result, Producer>> deadLetterProducer_;
     std::mutex createProducerLock_;
 
-    // Make the access to `startMessageId_`, `lastDequedMessageId_` and `lastMessageIdInBroker_` thread safe
+    // Make the access to `lastDequedMessageId_` and `lastMessageIdInBroker_` thread safe
     mutable std::mutex mutexForMessageId_;
-    boost::optional<MessageId> startMessageId_;
     MessageId lastDequedMessageId_{MessageId::earliest()};
     MessageId lastMessageIdInBroker_{MessageId::earliest()};
 
     mutable std::mutex mutexForSeek_;
     SeekStatus seekStatus_{SeekStatus::NOT_STARTED};
+    Synchronized<boost::optional<MessageId>> startMessageId_;
     MessageId seekMessageId_{MessageId::earliest()};
     ResultCallback seekCallback_{nullptr};
 
@@ -362,8 +362,7 @@ class ConsumerImpl : public ConsumerImplBase {
         }
         if (lastDequedMessageId_ == MessageId::earliest()) {
             // No message is received, compare with the start message ID
-            auto startMessageId = startMessageId_.value_or(MessageId::latest());
-            // TODO: we need to wait until startMessageId becomes latest
+            auto startMessageId = startMessageId_.get().value_or(MessageId::latest());
             if (config_.isStartMessageIdInclusive()) {
                 return lastMessageIdInBroker_ >= startMessageId;
             } else {

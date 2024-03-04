@@ -238,7 +238,6 @@ Future<Result, bool> ConsumerImpl::connectionOpened(const ClientConnectionPtr& c
     // sending the subscribe request.
     cnx->registerConsumer(consumerId_, get_shared_this_ptr());
 
-    boost::optional<MessageId> startMessageId = boost::none;
     Lock seekLock{mutexForSeek_};
     if (seekStatus_ != SeekStatus::NOT_STARTED) {
         ackGroupingTrackerPtr_->flushAndClean();
@@ -249,23 +248,21 @@ Future<Result, bool> ConsumerImpl::connectionOpened(const ClientConnectionPtr& c
             LOG_INFO(getName() << "Seek successfully");
             seekLock.unlock();
 
-            {
-                std::lock_guard<std::mutex> lockForMessageId{mutexForMessageId_};
-                startMessageId = startMessageId_ = seekMessageId;
-            }
-
+            startMessageId_ = seekMessageId;
             if (seekCallback) {
                 seekCallback(ResultOk);
             }
+        } else {
+            seekLock.unlock();
         }
     } else {
         seekLock.unlock();
         std::lock_guard<std::mutex> lockForMessageId(mutexForMessageId_);
-        startMessageId = startMessageId_ = clearReceiveQueue();
+        startMessageId_ = clearReceiveQueue();
     }
 
     const auto subscribeMessageId =
-        (subscriptionMode_ == Commands::SubscriptionModeNonDurable) ? startMessageId : boost::none;
+        (subscriptionMode_ == Commands::SubscriptionModeNonDurable) ? startMessageId_.get() : boost::none;
     unAckedMessageTrackerPtr_->clear();
 
     ClientImplPtr client = client_.lock();
@@ -604,9 +601,7 @@ void ConsumerImpl::messageReceived(const ClientConnectionPtr& cnx, const proto::
         // try convert key value data.
         m.impl_->convertPayloadToKeyValue(config_.getSchema());
 
-        Lock messageIdLock{mutexForMessageId_};
-        const auto startMessageId = startMessageId_;
-        messageIdLock.unlock();
+        const auto startMessageId = startMessageId_.get();
         if (isPersistent_ && startMessageId &&
             m.getMessageId().ledgerId() == startMessageId.value().ledgerId() &&
             m.getMessageId().entryId() == startMessageId.value().entryId() &&
@@ -732,9 +727,7 @@ uint32_t ConsumerImpl::receiveIndividualMessagesFromBatch(const ClientConnection
     auto batchSize = batchedMessage.impl_->metadata.num_messages_in_batch();
     LOG_DEBUG("Received Batch messages of size - " << batchSize
                                                    << " -- msgId: " << batchedMessage.getMessageId());
-    Lock messageIdLock{mutexForMessageId_};
-    const auto startMessageId = startMessageId_;
-    messageIdLock.unlock();
+    const auto startMessageId = startMessageId_.get();
 
     int skippedMessages = 0;
 
@@ -1073,7 +1066,7 @@ void ConsumerImpl::messageProcessed(Message& msg, bool track) {
  */
 boost::optional<MessageId> ConsumerImpl::clearReceiveQueue() {
     if (subscriptionMode_ == Commands::SubscriptionModeDurable) {
-        return startMessageId_;
+        return startMessageId_.get();
     }
     Message nextMessageInQueue;
     if (incomingMessages_.peekAndClear(nextMessageInQueue)) {
@@ -1099,7 +1092,7 @@ boost::optional<MessageId> ConsumerImpl::clearReceiveQueue() {
     } else {
         // No message was received or dequeued by this consumer. Next message would still be the
         // startMessageId
-        return startMessageId_;
+        return startMessageId_.get();
     }
 }
 
@@ -1520,9 +1513,10 @@ void ConsumerImpl::seekAsync(uint64_t timestamp, ResultCallback callback) {
 bool ConsumerImpl::isReadCompacted() { return readCompacted_; }
 
 void ConsumerImpl::hasMessageAvailableAsync(HasMessageAvailableCallback callback) {
+    auto startMessageId = startMessageId_.get();
     Lock lock(mutexForMessageId_);
     if (lastDequedMessageId_ == MessageId::earliest() &&
-        startMessageId_.value_or(MessageId::earliest()) == MessageId::latest()) {
+        startMessageId.value_or(MessageId::earliest()) == MessageId::latest()) {
         lock.unlock();
         auto self = get_shared_this_ptr();
         getLastMessageIdAsync([self, callback](Result result, const GetLastMessageIdResponse& response) {
