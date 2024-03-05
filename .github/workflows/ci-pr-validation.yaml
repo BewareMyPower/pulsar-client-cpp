@@ -79,6 +79,7 @@ jobs:
 
       - name: Build core libraries
         run: |
+          /usr/bin/clang-format --version
           cmake . -DINTEGRATE_VCPKG=ON -DBUILD_TESTS=OFF
           make check-format
           cmake --build . -j8
