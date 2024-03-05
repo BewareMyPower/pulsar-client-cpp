@@ -74,7 +74,7 @@ jobs:
       - uses: DoozyX/clang-format-lint-action@v0.17
         with:
           source: 'include lib tests perf examples'
-          clangFormatVersion: 14
+          clangFormatVersion: 11
           extensions: 'h,c,cc'
 
       - name: Build core libraries
