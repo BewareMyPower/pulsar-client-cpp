@@ -75,6 +75,7 @@ jobs:
         with:
           source: 'include lib tests perf examples'
           clangFormatVersion: 11
+          extensions: 'h,c,cc'
 
       - name: Build core libraries
         run: |
