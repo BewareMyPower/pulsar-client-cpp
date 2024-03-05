@@ -75,6 +75,13 @@ const static std::string SYSTEM_PROPERTY_REAL_TOPIC = "REAL_TOPIC";
 const static std::string PROPERTY_ORIGIN_MESSAGE_ID = "ORIGIN_MESSAGE_ID";
 const static std::string DLQ_GROUP_TOPIC_SUFFIX = "-DLQ";
 
+enum class SeekStatus : std::uint8_t
+{
+    NOT_STARTED,
+    IN_PROGRESS,
+    COMPLETED
+};
+
 class ConsumerImpl : public ConsumerImplBase {
    public:
     ConsumerImpl(const ClientImplPtr client, const std::string& topic, const std::string& subscriptionName,
@@ -234,14 +241,14 @@ class ConsumerImpl : public ConsumerImplBase {
     std::shared_ptr<Promise<Result, Producer>> deadLetterProducer_;
     std::mutex createProducerLock_;
 
-    // Make the access to `lastDequedMessageId_` and `lastMessageIdInBroker_` thread safe
-    mutable std::mutex mutexForMessageId_;
-    MessageId lastDequedMessageId_{MessageId::earliest()};
-    MessageId lastMessageIdInBroker_{MessageId::earliest()};
+    Synchronized<MessageId> lastDequedMessageId_{MessageId::earliest()};
+    Synchronized<MessageId> lastMessageIdInBroker_{MessageId::earliest()};
 
-    std::atomic_bool duringSeek_{false};
+    mutable std::mutex mutexForSeek_;
+    SeekStatus seekStatus_{SeekStatus::NOT_STARTED};
     Synchronized<boost::optional<MessageId>> startMessageId_;
-    Synchronized<MessageId> seekMessageId_{MessageId::earliest()};
+    MessageId seekMessageId_{MessageId::earliest()};
+    ResultCallback seekCallback_{nullptr};
 
     class ChunkedMessageCtx {
        public:
@@ -331,6 +338,38 @@ class ConsumerImpl : public ConsumerImplBase {
                                                       const proto::MessageMetadata& metadata,
                                                       const proto::MessageIdData& messageIdData,
                                                       const ClientConnectionPtr& cnx, MessageId& messageId);
+
+    Future<Result, GetLastMessageIdResponse> getLastMessageIdAsync() {
+        Promise<Result, GetLastMessageIdResponse> promise;
+        getLastMessageIdAsync([promise](Result result, const GetLastMessageIdResponse& response) {
+            if (result == ResultOk) {
+                promise.setValue(response);
+            } else {
+                promise.setFailed(result);
+            }
+        });
+        return promise.getFuture();
+    }
+
+    bool hasMoreMessages() const {
+        const auto lastMessageIdInBroker = lastMessageIdInBroker_.get();
+        if (lastMessageIdInBroker.entryId() == -1L) {
+            // Need to get last message ID from broker
+            return false;
+        }
+        const auto lastDequedMessageId = lastMessageIdInBroker_.get();
+        if (lastDequedMessageId == MessageId::earliest()) {
+            // No message is received, compare with the start message ID
+            const auto startMessageId = startMessageId_.get().value_or(MessageId::latest());
+            if (config_.isStartMessageIdInclusive()) {
+                return lastMessageIdInBroker >= startMessageId;
+            } else {
+                return lastMessageIdInBroker > startMessageId;
+            }
+        } else {
+            return lastMessageIdInBroker > lastDequedMessageId;
+        }
+    }
 
     friend class PulsarFriend;
     friend class MultiTopicsConsumerImpl;
