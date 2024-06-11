@@ -196,14 +196,20 @@ jobs:
           path: ${{ env.INSTALL_DIR }}-Debug
 
   package-macos:
-    name: Build macOS libraries
-    runs-on: macos-latest
+    name: Build macOS libraries (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 500
 
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, arm64]
+        include:
+          - name: 'x86_64'
+            arch: 'x86_64'
+            os: macos-13
+          - name: arm64
+            arch: arm64
+            os: macos-13-xlarge
 
     steps:
       - name: checkout
