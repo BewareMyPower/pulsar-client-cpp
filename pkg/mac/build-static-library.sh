@@ -21,7 +21,9 @@
 set -ex
 cd `dirname $0`
 
-pip3 install pyyaml
+python3 -m venv python/venv
+source python/venv/bin/activate
+python3 -m pip install pyyaml
 
 MACOSX_DEPLOYMENT_TARGET=10.15
 if [[ -z ${ARCH} ]]; then

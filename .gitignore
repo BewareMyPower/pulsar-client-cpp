@@ -106,3 +106,4 @@ Testing
 .test-token.txt
 pkg/mac/.build
 pkg/mac/.install
+pkg/mac/python/
