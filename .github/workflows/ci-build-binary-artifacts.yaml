@@ -209,7 +209,9 @@ jobs:
             os: macos-13
           - name: arm64
             arch: arm64
-            os: macos-13-xlarge
+            # TODO: switch to macos-13-xlarge in the apache repo
+            # The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings.
+            os: macos-13
 
     steps:
       - name: checkout
