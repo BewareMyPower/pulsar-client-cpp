@@ -18,6 +18,7 @@
  */
 #include "ClientConnection.h"
 
+#include <openssl/x509.h>
 #include <pulsar/MessageIdBuilder.h>
 
 #include <boost/optional.hpp>
@@ -226,6 +227,8 @@ ClientConnection::ClientConnection(const std::string& logicalAddress, const std:
                     throw ResultAuthenticationError;
                 }
             } else {
+                LOG_INFO("Use default verify paths | dir: " << X509_get_default_cert_dir()
+                                                            << ", path: " << X509_get_default_cert_file());
                 ctx.set_default_verify_paths();
             }
         }
