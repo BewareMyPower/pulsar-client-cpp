@@ -41,7 +41,7 @@ ADD .build/dependencies.yaml /
 ADD .build/dep-version.py /usr/local/bin
 
 # Vcpkg does not provide pre-built binaries for Arm architectures so we need to build vcpkg from source
-RUN yum install cmake &&
+RUN yum install cmake && \
     dnf --enablerepo=devel install -y ninja-build
 
 # Dependencies when building OpenSSL
