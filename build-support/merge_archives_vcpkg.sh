@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -17,32 +18,15 @@
 # under the License.
 #
 
-# Build pulsar client library in Centos with tools to build static RPM
+set -e
+cd `dirname $0`
 
-FROM rockylinux:8
+if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 <cmake-build-directory>"
+    exit 1
+fi
 
-ARG PLATFORM
-
-RUN yum update -y && \
-    yum install -y \
-        gcc-c++ \
-        make \
-        rpm-build \
-        which \
-        createrepo \
-        git \
-        python3 \
-        python3-pip
-RUN dnf --enablerepo=powertools install -y libstdc++-static
-
-RUN pip3 install pyyaml
-
-ADD .build/dependencies.yaml /
-ADD .build/dep-version.py /usr/local/bin
-
-# Vcpkg does not provide pre-built binaries for Arm architectures so we need to build vcpkg from source
-RUN yum install cmake &&
-    dnf --enablerepo=devel install -y ninja-build
-
-# Dependencies when building OpenSSL
-RUN yum install -y perl-IPC-Cmd
+CMAKE_BUILD_DIRECTORY=$1
+./merge_archives.sh $CMAKE_BUILD_DIRECTORY/libpulsarwithdeps.a \
+    $CMAKE_BUILD_DIRECTORY/lib/libpulsar.a \
+    $(find "$CMAKE_BUILD_DIRECTORY/vcpkg_installed" -name "*.a" | grep -v debug)
