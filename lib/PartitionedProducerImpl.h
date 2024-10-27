@@ -67,7 +67,7 @@ class PartitionedProducerImpl : public ProducerImplBase,
     const std::string& getProducerName() const override;
     int64_t getLastSequenceId() const override;
     const std::string& getSchemaVersion() const override;
-    void sendAsync(const Message& msg, SendCallback callback) override;
+    void sendAsync(const Message& msg, SendCallback&& callback) override;
     /*
      * closes all active producers, it can be called explicitly from client as well as createProducer
      * when it fails to create one of the producers and we want to fail createProducer

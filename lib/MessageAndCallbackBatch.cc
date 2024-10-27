@@ -33,19 +33,20 @@ MessageAndCallbackBatch::MessageAndCallbackBatch() {}
 
 MessageAndCallbackBatch::~MessageAndCallbackBatch() {}
 
-void MessageAndCallbackBatch::add(const Message& msg, const SendCallback& callback) {
+void MessageAndCallbackBatch::add(const Message& msg, SendCallback&& callback) {
     if (callbacks_.empty()) {
         metadata_.reset(new proto::MessageMetadata);
         Commands::initBatchMessageMetadata(msg, *metadata_);
     }
     messages_.emplace_back(msg);
-    callbacks_.emplace_back(callback);
+    callbacks_.emplace_back(std::move(callback));
     messagesSize_ += msg.getLength();
 }
 
 std::unique_ptr<OpSendMsg> MessageAndCallbackBatch::createOpSendMsg(
     uint64_t producerId, const ProducerConfiguration& producerConfig, MessageCrypto* crypto) {
     auto callback = createSendCallback();
+    auto numMessages = callbacks_.size();
     if (empty()) {
         return OpSendMsg::create(ResultOperationNotSupported, std::move(callback));
     }
@@ -75,7 +76,7 @@ std::unique_ptr<OpSendMsg> MessageAndCallbackBatch::createOpSendMsg(
         return OpSendMsg::create(ResultMessageTooBig, std::move(callback));
     }
 
-    auto op = OpSendMsg::create(*metadata_, callbacks_.size(), messagesSize_, producerConfig.getSendTimeout(),
+    auto op = OpSendMsg::create(*metadata_, numMessages, messagesSize_, producerConfig.getSendTimeout(),
                                 std::move(callback), nullptr, producerId, payload);
     clear();
     return op;
@@ -96,8 +97,9 @@ static void completeSendCallbacks(const std::vector<SendCallback>& callbacks, Re
 }
 
 SendCallback MessageAndCallbackBatch::createSendCallback() const {
-    const auto& callbacks = callbacks_;
-    return [callbacks](Result result, const MessageId& id) { completeSendCallbacks(callbacks, result, id); };
+    return [callbacks{std::move(callbacks_)}](Result result, const MessageId& id) {
+        completeSendCallbacks(callbacks, result, id);
+    };
 }
 
 }  // namespace pulsar

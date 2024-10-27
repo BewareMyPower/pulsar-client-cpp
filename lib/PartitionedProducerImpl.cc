@@ -198,7 +198,7 @@ void PartitionedProducerImpl::createLazyPartitionProducer(unsigned int partition
 }
 
 // override
-void PartitionedProducerImpl::sendAsync(const Message& msg, SendCallback callback) {
+void PartitionedProducerImpl::sendAsync(const Message& msg, SendCallback&& callback) {
     if (state_ != Ready) {
         if (callback) {
             callback(ResultAlreadyClosed, msg.getMessageId());
@@ -234,7 +234,8 @@ void PartitionedProducerImpl::sendAsync(const Message& msg, SendCallback callbac
     } else {
         // Wrapping the callback into a lambda has overhead, so we check if the producer is ready first
         producer->getProducerCreatedFuture().addListener(
-            [msg, callback](Result result, ProducerImplBaseWeakPtr weakProducer) {
+            [msg, callback{std::move(callback)}](Result result,
+                                                 ProducerImplBaseWeakPtr weakProducer) mutable {
                 if (result == ResultOk) {
                     weakProducer.lock()->sendAsync(msg, std::move(callback));
                 } else if (callback) {

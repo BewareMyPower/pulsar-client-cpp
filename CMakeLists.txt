@@ -111,11 +111,10 @@ file(MAKE_DIRECTORY ${AUTOGEN_DIR})
 
 if (INTEGRATE_VCPKG)
     if (NOT CMAKE_CXX_STANDARD)
-        set(CMAKE_CXX_STANDARD 11)
+        set(CMAKE_CXX_STANDARD 14)
     endif ()
     set(CMAKE_C_STANDARD 11)
-    set(Boost_NO_BOOST_CMAKE ON)
-    find_package(Boost REQUIRED)
+    find_package(Boost CONFIG REQUIRED)
     include_directories(${Boost_INCLUDE_DIRS})
     message("Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
 

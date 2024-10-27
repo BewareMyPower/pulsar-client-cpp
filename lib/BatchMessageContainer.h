@@ -43,7 +43,7 @@ class BatchMessageContainer : public BatchMessageContainerBase {
 
     bool isFirstMessageToAdd(const Message& msg) const override { return batch_.empty(); }
 
-    bool add(const Message& msg, const SendCallback& callback) override;
+    bool add(const Message& msg, SendCallback&& callback) override;
 
     void serialize(std::ostream& os) const override;
 

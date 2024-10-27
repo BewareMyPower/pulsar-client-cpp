@@ -64,7 +64,7 @@ void Producer::sendAsync(const Message& msg, SendCallback callback) {
         return;
     }
 
-    impl_->sendAsync(msg, callback);
+    impl_->sendAsync(msg, std::move(callback));
 }
 
 const std::string& Producer::getProducerName() const { return impl_->getProducerName(); }

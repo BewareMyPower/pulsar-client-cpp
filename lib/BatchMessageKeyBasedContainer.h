@@ -36,7 +36,7 @@ class BatchMessageKeyBasedContainer : public BatchMessageContainerBase {
 
     bool isFirstMessageToAdd(const Message& msg) const override;
 
-    bool add(const Message& msg, const SendCallback& callback) override;
+    bool add(const Message& msg, SendCallback&& callback) override;
 
     std::vector<std::unique_ptr<OpSendMsg>> createOpSendMsgs(const FlushCallback& flushCallback) override;
 

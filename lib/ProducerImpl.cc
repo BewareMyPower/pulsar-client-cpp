@@ -465,7 +465,7 @@ static SharedBuffer applyCompression(const SharedBuffer& uncompressedPayload,
     return CompressionCodecProvider::getCodec(compressionType).encode(uncompressedPayload);
 }
 
-void ProducerImpl::sendAsync(const Message& msg, SendCallback callback) {
+void ProducerImpl::sendAsync(const Message& msg, SendCallback&& callback) {
     producerStatsBasePtr_->messageSent(msg);
 
     Producer producer = Producer(shared_from_this());
@@ -473,16 +473,17 @@ void ProducerImpl::sendAsync(const Message& msg, SendCallback callback) {
 
     const auto now = TimeUtils::now();
     auto self = shared_from_this();
-    sendAsyncWithStatsUpdate(interceptorMessage, [this, self, now, callback, producer, interceptorMessage](
-                                                     Result result, const MessageId& messageId) {
-        producerStatsBasePtr_->messageReceived(result, now);
+    sendAsyncWithStatsUpdate(
+        interceptorMessage, [this, self, now, callback{std::move(callback)}, producer, interceptorMessage](
+                                Result result, const MessageId& messageId) {
+            producerStatsBasePtr_->messageReceived(result, now);
 
-        interceptors_->onSendAcknowledgement(producer, result, interceptorMessage, messageId);
+            interceptors_->onSendAcknowledgement(producer, result, interceptorMessage, messageId);
 
-        if (callback) {
-            callback(result, messageId);
-        }
-    });
+            if (callback) {
+                callback(result, messageId);
+            }
+        });
 }
 
 void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& callback) {
@@ -511,7 +512,7 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
 
     // We have already reserved a spot, so if we need to early return for failed result, we should release the
     // semaphore and memory first.
-    const auto handleFailedResult = [this, uncompressedSize, callback](Result result) {
+    const auto handleFailedResult = [this, uncompressedSize, &callback](Result result) {
         releaseSemaphore(uncompressedSize);  // it releases the memory as well
         callback(result, {});
     };
@@ -568,7 +569,7 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
             batchMessageAndSend().complete();
         }
         bool isFirstMessage = batchMessageContainer_->isFirstMessageToAdd(msg);
-        bool isFull = batchMessageContainer_->add(msg, callback);
+        bool isFull = batchMessageContainer_->add(msg, std::move(callback));
         if (isFirstMessage) {
             batchTimer_->expires_from_now(milliseconds(conf_.getBatchingMaxPublishDelayMs()));
             auto weakSelf = weak_from_this();
@@ -625,8 +626,8 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
             }
 
             auto op = OpSendMsg::create(msgMetadata, 1, uncompressedSize, conf_.getSendTimeout(),
-                                        (chunkId == totalChunks - 1) ? callback : nullptr, chunkMessageIdList,
-                                        producerId_, encryptedPayload);
+                                        (chunkId == totalChunks - 1) ? std::move(callback) : nullptr,
+                                        chunkMessageIdList, producerId_, encryptedPayload);
 
             if (!chunkingEnabled_) {
                 const uint32_t msgMetadataSize = op->sendArgs->metadata.ByteSizeLong();

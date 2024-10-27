@@ -81,7 +81,7 @@ class ProducerImpl : public HandlerBase, public ProducerImplBase {
     const std::string& getProducerName() const override;
     int64_t getLastSequenceId() const override;
     const std::string& getSchemaVersion() const override;
-    void sendAsync(const Message& msg, SendCallback callback) override;
+    void sendAsync(const Message& msg, SendCallback&& callback) override;
     void closeAsync(CloseCallback callback) override;
     void start() override;
     void shutdown() override;
