@@ -468,17 +468,30 @@ static SharedBuffer applyCompression(const SharedBuffer& uncompressedPayload,
 void ProducerImpl::sendAsync(const Message& msg, SendCallback&& callback) {
     producerStatsBasePtr_->messageSent(msg);
 
-    Producer producer = Producer(shared_from_this());
-    auto interceptorMessage = interceptors_->beforeSend(producer, msg);
+    auto self = shared_from_this();
+    if (interceptors_->empty()) {
+        const auto now = TimeUtils::now();
+        sendAsyncWithStatsUpdate(
+            msg, [this, self, now, callback{std::move(callback)}](Result result, const MessageId& msgId) {
+                producerStatsBasePtr_->messageReceived(result, now);
+                if (callback) {
+                    callback(result, msgId);
+                }
+            });
+        return;
+    }
+
+    auto interceptorMessage = producer_ ? interceptors_->beforeSend(*producer_, msg) : msg;
 
     const auto now = TimeUtils::now();
-    auto self = shared_from_this();
     sendAsyncWithStatsUpdate(
-        interceptorMessage, [this, self, now, callback{std::move(callback)}, producer, interceptorMessage](
+        interceptorMessage, [this, self, now, callback{std::move(callback)}, interceptorMessage](
                                 Result result, const MessageId& messageId) {
             producerStatsBasePtr_->messageReceived(result, now);
 
-            interceptors_->onSendAcknowledgement(producer, result, interceptorMessage, messageId);
+            if (producer_) {
+                interceptors_->onSendAcknowledgement(*producer_, result, interceptorMessage, messageId);
+            }
 
             if (callback) {
                 callback(result, messageId);

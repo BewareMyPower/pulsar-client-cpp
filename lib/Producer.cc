@@ -26,7 +26,7 @@ namespace pulsar {
 
 static const std::string EMPTY_STRING;
 
-Producer::Producer() : impl_() {}
+Producer::Producer() : impl_() { impl_->producer_ = this; }
 
 Producer::Producer(ProducerImplBasePtr impl) : impl_(impl) {}
 

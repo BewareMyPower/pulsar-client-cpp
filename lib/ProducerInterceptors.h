@@ -41,6 +41,8 @@ class ProducerInterceptors {
 
     void close();
 
+    bool empty() const noexcept { return interceptors_.empty(); }
+
    private:
     enum State
     {
