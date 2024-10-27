@@ -780,8 +780,8 @@ void ClientConnection::processIncomingBuffer() {
             uint32_t payloadSize = remainingBytes;
             SharedBuffer payload = SharedBuffer::copy(incomingBuffer_.data(), payloadSize);
             incomingBuffer_.consume(payloadSize);
-            handleIncomingMessage(incomingCmd.message(), isChecksumValid, brokerEntryMetadata, msgMetadata,
-                                  payload);
+            handleIncomingMessage(incomingCmd.message(), isChecksumValid, brokerEntryMetadata,
+                                  std::move(msgMetadata), std::move(payload));
         } else {
             handleIncomingCommand(incomingCmd);
         }
@@ -865,7 +865,7 @@ void ClientConnection::handleActiveConsumerChange(const proto::CommandActiveCons
 
 void ClientConnection::handleIncomingMessage(const proto::CommandMessage& msg, bool isChecksumValid,
                                              proto::BrokerEntryMetadata& brokerEntryMetadata,
-                                             proto::MessageMetadata& msgMetadata, SharedBuffer& payload) {
+                                             proto::MessageMetadata&& msgMetadata, SharedBuffer&& payload) {
     LOG_DEBUG(cnxString_ << "Received a message from the server for consumer: " << msg.consumer_id());
 
     Lock lock(mutex_);
@@ -878,7 +878,7 @@ void ClientConnection::handleIncomingMessage(const proto::CommandMessage& msg, b
             // new received message
             lock.unlock();
             consumer->messageReceived(shared_from_this(), msg, isChecksumValid, brokerEntryMetadata,
-                                      msgMetadata, payload);
+                                      std::move(msgMetadata), std::move(payload));
         } else {
             consumers_.erase(msg.consumer_id());
             LOG_DEBUG(cnxString_ << "Ignoring incoming message for already destroyed consumer "

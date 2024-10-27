@@ -32,7 +32,7 @@ MessageBatch::MessageBatch() : impl_(std::make_shared<MessageImpl>()), batchMess
 }
 
 MessageBatch& MessageBatch::withMessageId(const MessageId& messageId) {
-    impl_->messageId = messageId;
+    impl_->setMessageId(messageId);
     return *this;
 }
 
@@ -43,8 +43,8 @@ MessageBatch& MessageBatch::parseFrom(const std::string& payload, uint32_t batch
 }
 
 MessageBatch& MessageBatch::parseFrom(const SharedBuffer& payload, uint32_t batchSize) {
-    impl_->payload = payload;
-    impl_->metadata.set_num_messages_in_batch(batchSize);
+    impl_->payload() = payload;
+    impl_->metadata().set_num_messages_in_batch(batchSize);
     batch_.clear();
 
     auto acker = BatchMessageAckerImpl::create(batchSize);

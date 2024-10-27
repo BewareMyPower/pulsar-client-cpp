@@ -518,7 +518,7 @@ void MultiTopicsConsumerImpl::messageReceived(Consumer consumer, const Message& 
     LOG_DEBUG("Received Message from one of the topic - " << consumer.getTopic()
                                                           << " message:" << msg.getDataAsString());
     msg.impl_->setTopicName(consumer.impl_->getTopicPtr());
-    msg.impl_->consumerPtr_ = std::static_pointer_cast<ConsumerImpl>(consumer.impl_);
+    msg.impl_->setConsumer(std::static_pointer_cast<ConsumerImpl>(consumer.impl_));
 
     Lock lock(pendingReceiveMutex_);
     if (!pendingReceives_.empty()) {
@@ -530,7 +530,7 @@ void MultiTopicsConsumerImpl::messageReceived(Consumer consumer, const Message& 
             auto self = weakSelf.lock();
             if (self) {
                 notifyPendingReceivedCallback(ResultOk, msg, callback);
-                auto consumer = msg.impl_->consumerPtr_.lock();
+                auto consumer = msg.impl_->consumer();
                 if (consumer) {
                     consumer->increaseAvailablePermits(msg);
                 }
@@ -1099,7 +1099,7 @@ void MultiTopicsConsumerImpl::notifyBatchPendingReceivedCallback(const BatchRece
 void MultiTopicsConsumerImpl::messageProcessed(Message& msg) {
     incomingMessagesSize_.fetch_sub(msg.getLength());
     unAckedMessageTrackerPtr_->add(msg.getMessageId());
-    auto consumer = msg.impl_->consumerPtr_.lock();
+    auto consumer = msg.impl_->consumer();
     if (consumer) {
         consumer->increaseAvailablePermits(msg);
     }

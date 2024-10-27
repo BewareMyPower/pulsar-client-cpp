@@ -506,7 +506,7 @@ boost::optional<SharedBuffer> ConsumerImpl::processMessageChunk(const SharedBuff
 
 void ConsumerImpl::messageReceived(const ClientConnectionPtr& cnx, const proto::CommandMessage& msg,
                                    bool& isChecksumValid, proto::BrokerEntryMetadata& brokerEntryMetadata,
-                                   proto::MessageMetadata& metadata, SharedBuffer& payload) {
+                                   proto::MessageMetadata&& metadata, SharedBuffer&& payload) {
     LOG_DEBUG(getName() << "Received Message -- Size: " << payload.readableBytes());
 
     if (!decryptMessageIfNeeded(cnx, msg, metadata, payload)) {
@@ -546,26 +546,28 @@ void ConsumerImpl::messageReceived(const ClientConnectionPtr& cnx, const proto::
         }
     }
 
-    Message m(messageId, brokerEntryMetadata, metadata, payload);
-    m.impl_->cnx_ = cnx.get();
-    m.impl_->setTopicName(getTopicPtr());
-    m.impl_->setRedeliveryCount(msg.redelivery_count());
+    auto msgImpl =
+        std::make_shared<MessageImpl>(std::move(metadata), std::move(payload),
+                                      brokerEntryMetadata.has_index() ? brokerEntryMetadata.index() : -1,
+                                      messageId, getTopicPtr(), cnx.get());
+    msgImpl->setRedeliveryCount(msg.redelivery_count());
 
     if (metadata.has_schema_version()) {
-        m.impl_->setSchemaVersion(metadata.schema_version());
+        msgImpl->setSchemaVersion(metadata.schema_version());
     }
 
     LOG_DEBUG(getName() << " metadata.num_messages_in_batch() = " << metadata.num_messages_in_batch());
     LOG_DEBUG(getName() << " metadata.has_num_messages_in_batch() = "
                         << metadata.has_num_messages_in_batch());
 
-    uint32_t numOfMessageReceived = m.impl_->metadata.num_messages_in_batch();
-    if (this->ackGroupingTrackerPtr_->isDuplicate(m.getMessageId())) {
+    uint32_t numOfMessageReceived = msgImpl->metadata().num_messages_in_batch();
+    if (this->ackGroupingTrackerPtr_->isDuplicate(msgImpl->messageId())) {
         LOG_DEBUG(getName() << " Ignoring message as it was ACKed earlier by same consumer.");
         increaseAvailablePermits(cnx, numOfMessageReceived);
         return;
     }
 
+    Message m{msgImpl};
     if (metadata.has_num_messages_in_batch()) {
         BitSet::Data words(msg.ack_set_size());
         for (int i = 0; i < words.size(); i++) {
@@ -576,21 +578,20 @@ void ConsumerImpl::messageReceived(const ClientConnectionPtr& cnx, const proto::
         numOfMessageReceived = receiveIndividualMessagesFromBatch(cnx, m, ackSet, msg.redelivery_count());
     } else {
         // try convert key value data.
-        m.impl_->convertPayloadToKeyValue(config_.getSchema());
+        msgImpl->convertPayloadToKeyValue(config_.getSchema());
 
         const auto startMessageId = startMessageId_.get();
-        if (isPersistent_ && startMessageId &&
-            m.getMessageId().ledgerId() == startMessageId.value().ledgerId() &&
-            m.getMessageId().entryId() == startMessageId.value().entryId() &&
-            isPriorEntryIndex(m.getMessageId().entryId())) {
+        if (isPersistent_ && startMessageId && messageId.ledgerId() == startMessageId.value().ledgerId() &&
+            messageId.entryId() == startMessageId.value().entryId() &&
+            isPriorEntryIndex(messageId.entryId())) {
             LOG_DEBUG(getName() << " Ignoring message from before the startMessageId: "
                                 << startMessageId.value());
             return;
         }
         if (redeliveryCount >= deadLetterPolicy_.getMaxRedeliverCount()) {
-            possibleSendToDeadLetterTopicMessages_.emplace(m.getMessageId(), std::vector<Message>{m});
+            possibleSendToDeadLetterTopicMessages_.emplace(messageId, std::vector<Message>{m});
             if (redeliveryCount > deadLetterPolicy_.getMaxRedeliverCount()) {
-                redeliverUnacknowledgedMessages({m.getMessageId()});
+                redeliverUnacknowledgedMessages({messageId});
                 increaseAvailablePermits(cnx);
                 return;
             }
@@ -701,7 +702,7 @@ void ConsumerImpl::notifyPendingReceivedCallback(Result result, Message& msg,
 uint32_t ConsumerImpl::receiveIndividualMessagesFromBatch(const ClientConnectionPtr& cnx,
                                                           Message& batchedMessage, const BitSet& ackSet,
                                                           int redeliveryCount) {
-    auto batchSize = batchedMessage.impl_->metadata.num_messages_in_batch();
+    auto batchSize = batchedMessage.impl_->metadata().num_messages_in_batch();
     LOG_DEBUG("Received Batch messages of size - " << batchSize
                                                    << " -- msgId: " << batchedMessage.getMessageId());
     const auto startMessageId = startMessageId_.get();
@@ -714,11 +715,11 @@ uint32_t ConsumerImpl::receiveIndividualMessagesFromBatch(const ClientConnection
         // This is a cheap copy since message contains only one shared pointer (impl_)
         Message msg = Commands::deSerializeSingleMessageInBatch(batchedMessage, i, batchSize, acker);
         msg.impl_->setRedeliveryCount(redeliveryCount);
-        msg.impl_->setTopicName(batchedMessage.impl_->topicName_);
+        msg.impl_->setTopicName(batchedMessage.impl_->topicName());
         msg.impl_->convertPayloadToKeyValue(config_.getSchema());
-        if (msg.impl_->brokerEntryMetadata.has_index()) {
-            msg.impl_->brokerEntryMetadata.set_index(msg.impl_->brokerEntryMetadata.index() - batchSize + i +
-                                                     1);
+
+        if (msg.impl_->index() >= 0) {
+            msg.impl_->updateIndex(i, batchSize);
         }
 
         if (redeliveryCount >= deadLetterPolicy_.getMaxRedeliverCount()) {
@@ -916,7 +917,7 @@ Result ConsumerImpl::fetchSingleMessageFromBroker(Message& msg) {
             Lock localLock(mutex_);
             // if message received due to an old flow - discard it and wait for the message from the
             // latest flow command
-            if (msg.impl_->cnx_ == currentCnx.get()) {
+            if (msg.impl_->cnx() == currentCnx.get()) {
                 waitingForZeroQueueSizeMessage = false;
                 // Can't use break here else it may trigger a race with connection opened.
 
@@ -1023,7 +1024,7 @@ void ConsumerImpl::messageProcessed(Message& msg, bool track) {
     incomingMessagesSize_.fetch_sub(msg.getLength());
 
     ClientConnectionPtr currentCnx = getCnx().lock();
-    if (currentCnx && msg.impl_->cnx_ != currentCnx.get()) {
+    if (currentCnx && msg.impl_->cnx() != currentCnx.get()) {
         LOG_DEBUG(getName() << "Not adding permit since connection is different.");
         return;
     }
@@ -1094,7 +1095,7 @@ void ConsumerImpl::increaseAvailablePermits(const ClientConnectionPtr& currentCn
 
 void ConsumerImpl::increaseAvailablePermits(const Message& msg) {
     ClientConnectionPtr currentCnx = getCnx().lock();
-    if (currentCnx && msg.impl_->cnx_ != currentCnx.get()) {
+    if (currentCnx && msg.impl_->cnx() != currentCnx.get()) {
         LOG_DEBUG(getName() << "Not adding permit since connection is different.");
         return;
     }

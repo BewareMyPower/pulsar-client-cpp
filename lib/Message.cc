@@ -28,6 +28,7 @@
 #include "MessageImpl.h"
 #include "PulsarApi.pb.h"
 #include "SharedBuffer.h"
+#include "lib/LogUtils.h"
 
 using namespace pulsar;
 
@@ -52,9 +53,9 @@ const std::string& Message::getProperty(const std::string& name) const {
     }
 }
 
-const void* Message::getData() const { return impl_->payload.data(); }
+const void* Message::getData() const { return impl_->payload().data(); }
 
-std::size_t Message::getLength() const { return impl_->payload.readableBytes(); }
+std::size_t Message::getLength() const { return impl_->payload().readableBytes(); }
 
 #if defined(_MSC_VER) && !defined(NDEBUG)
 const std::string& Message::getDataAsString() const {
@@ -68,86 +69,24 @@ std::string Message::getDataAsString() const { return std::string((const char*)g
 
 Message::Message() : impl_() {}
 
-Message::Message(MessageImplPtr& impl) : impl_(impl) {}
-
-Message::Message(const MessageId& messageId, proto::BrokerEntryMetadata& brokerEntryMetadata,
-                 proto::MessageMetadata& metadata, SharedBuffer& payload)
-    : impl_(std::make_shared<MessageImpl>()) {
-    impl_->messageId = messageId;
-    impl_->brokerEntryMetadata = brokerEntryMetadata;
-    impl_->metadata = metadata;
-    impl_->payload = payload;
-}
-
-Message::Message(const MessageId& messageID, proto::BrokerEntryMetadata& brokerEntryMetadata,
-                 proto::MessageMetadata& metadata, SharedBuffer& payload,
-                 proto::SingleMessageMetadata& singleMetadata, const std::shared_ptr<std::string>& topicName)
-    : impl_(std::make_shared<MessageImpl>()) {
-    impl_->messageId = messageID;
-    impl_->brokerEntryMetadata = brokerEntryMetadata;
-    impl_->metadata = metadata;
-    impl_->payload = payload;
-    impl_->metadata.mutable_properties()->CopyFrom(singleMetadata.properties());
-    impl_->topicName_ = topicName;
-
-    impl_->metadata.clear_properties();
-    if (singleMetadata.properties_size() > 0) {
-        impl_->metadata.mutable_properties()->Reserve(singleMetadata.properties_size());
-        for (int i = 0; i < singleMetadata.properties_size(); i++) {
-            auto keyValue = proto::KeyValue().New();
-            *keyValue = singleMetadata.properties(i);
-            impl_->metadata.mutable_properties()->AddAllocated(keyValue);
-        }
-    }
-
-    if (singleMetadata.has_partition_key()) {
-        impl_->metadata.set_partition_key(singleMetadata.partition_key());
-    } else {
-        impl_->metadata.clear_partition_key();
-    }
-
-    if (singleMetadata.has_ordering_key()) {
-        impl_->metadata.set_ordering_key(singleMetadata.ordering_key());
-    } else {
-        impl_->metadata.clear_ordering_key();
-    }
-
-    if (singleMetadata.has_event_time()) {
-        impl_->metadata.set_event_time(singleMetadata.event_time());
-    } else {
-        impl_->metadata.clear_event_time();
-    }
-
-    if (singleMetadata.has_sequence_id()) {
-        impl_->metadata.set_sequence_id(singleMetadata.sequence_id());
-    } else {
-        impl_->metadata.clear_sequence_id();
-    }
-}
+Message::Message(const MessageImplPtr& impl) : impl_(impl) {}
 
 const MessageId& Message::getMessageId() const {
     if (!impl_) {
         return invalidMessageId;
     } else {
-        return impl_->messageId;
+        return impl_->messageId();
     }
 }
 
 void Message::setMessageId(const MessageId& messageID) const {
     if (impl_) {
-        impl_->messageId = messageID;
+        impl_->setMessageId(messageID);
     }
     return;
 }
 
-int64_t Message::getIndex() const {
-    if (!impl_ || !impl_->brokerEntryMetadata.has_index()) {
-        return -1;
-    } else {
-        // casting uint64_t to int64_t, server definition ensures that's safe
-        return static_cast<int64_t>(impl_->brokerEntryMetadata.index());
-    }
-}
+int64_t Message::getIndex() const { return impl_ ? impl_->index() : -1; }
 
 bool Message::hasPartitionKey() const {
     if (impl_) {
@@ -215,7 +154,7 @@ uint64_t Message::getEventTimestamp() const { return impl_ ? impl_->getEventTime
 
 bool Message::operator==(const Message& msg) const { return getMessageId() == msg.getMessageId(); }
 
-KeyValue Message::getKeyValueData() const { return KeyValue(impl_->keyValuePtr); }
+KeyValue Message::getKeyValueData() const { return KeyValue(impl_->keyValuePtr()); }
 
 PULSAR_PUBLIC std::ostream& operator<<(std::ostream& s, const Message::StringMap& map) {
     // Output at most 10 elements -- appropriate if used for logging.
@@ -243,9 +182,9 @@ PULSAR_PUBLIC std::ostream& operator<<(std::ostream& s, const Message& msg) {
     assert(msg.impl_.get());
     assert(msg.impl_->metadata.has_sequence_id());
     assert(msg.impl_->metadata.has_publish_time());
-    s << "Message(prod=" << msg.impl_->metadata.producer_name()
-      << ", seq=" << msg.impl_->metadata.sequence_id()
-      << ", publish_time=" << msg.impl_->metadata.publish_time() << ", payload_size=" << msg.getLength()
+    s << "Message(prod=" << msg.impl_->metadata().producer_name()
+      << ", seq=" << msg.impl_->metadata().sequence_id()
+      << ", publish_time=" << msg.impl_->metadata().publish_time() << ", payload_size=" << msg.getLength()
       << ", msg_id=" << msg.getMessageId() << ", props=" << msg.getProperties() << ')';
     return s;
 }

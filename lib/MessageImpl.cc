@@ -18,38 +18,46 @@
  */
 #include "MessageImpl.h"
 
+#include "ObjectPool.h"
+
 namespace pulsar {
 
+static ObjectPool<MessageImpl, 100000> messagePool;
+
 const Message::StringMap& MessageImpl::properties() {
-    if (properties_.size() == 0) {
-        for (int i = 0; i < metadata.properties_size(); i++) {
-            const std::string& key = metadata.properties(i).key();
-            const std::string& value = metadata.properties(i).value();
-            properties_.insert(std::make_pair(key, value));
+    static Message::StringMap kEmptyMap;
+    if (context_ == nullptr) {
+        return kEmptyMap;
+    }
+    if (context_->properties.size() == 0) {
+        for (int i = 0; i < metadata_.properties_size(); i++) {
+            const std::string& key = metadata_.properties(i).key();
+            const std::string& value = metadata_.properties(i).value();
+            context_->properties.insert(std::make_pair(key, value));
         }
     }
-    return properties_;
+    return context_->properties;
 }
 
-const std::string& MessageImpl::getPartitionKey() const { return metadata.partition_key(); }
+const std::string& MessageImpl::getPartitionKey() const { return metadata_.partition_key(); }
 
-bool MessageImpl::hasPartitionKey() const { return metadata.has_partition_key(); }
+bool MessageImpl::hasPartitionKey() const { return metadata_.has_partition_key(); }
 
-const std::string& MessageImpl::getOrderingKey() const { return metadata.ordering_key(); }
+const std::string& MessageImpl::getOrderingKey() const { return metadata_.ordering_key(); }
 
-bool MessageImpl::hasOrderingKey() const { return metadata.has_ordering_key(); }
+bool MessageImpl::hasOrderingKey() const { return metadata_.has_ordering_key(); }
 
 uint64_t MessageImpl::getPublishTimestamp() const {
-    if (metadata.has_publish_time()) {
-        return metadata.publish_time();
+    if (metadata_.has_publish_time()) {
+        return metadata_.publish_time();
     } else {
         return 0ull;
     }
 }
 
 uint64_t MessageImpl::getEventTimestamp() const {
-    if (metadata.has_event_time()) {
-        return metadata.event_time();
+    if (metadata_.has_event_time()) {
+        return metadata_.event_time();
     } else {
         return 0ull;
     }
@@ -57,7 +65,7 @@ uint64_t MessageImpl::getEventTimestamp() const {
 
 void MessageImpl::setReplicationClusters(const std::vector<std::string>& clusters) {
     google::protobuf::RepeatedPtrField<std::string> r(clusters.begin(), clusters.end());
-    r.Swap(metadata.mutable_replicate_to());
+    r.Swap(metadata_.mutable_replicate_to());
 }
 
 void MessageImpl::disableReplication(bool flag) {
@@ -65,40 +73,51 @@ void MessageImpl::disableReplication(bool flag) {
     if (flag) {
         r.AddAllocated(new std::string("__local__"));
     }
-    r.Swap(metadata.mutable_replicate_to());
+    r.Swap(metadata_.mutable_replicate_to());
 }
 
 void MessageImpl::setProperty(const std::string& name, const std::string& value) {
     proto::KeyValue* keyValue = proto::KeyValue().New();
     keyValue->set_key(name);
     keyValue->set_value(value);
-    metadata.mutable_properties()->AddAllocated(keyValue);
+    metadata_.mutable_properties()->AddAllocated(keyValue);
 }
 
 void MessageImpl::setPartitionKey(const std::string& partitionKey) {
-    metadata.set_partition_key(partitionKey);
+    metadata_.set_partition_key(partitionKey);
 }
 
-void MessageImpl::setOrderingKey(const std::string& orderingKey) { metadata.set_ordering_key(orderingKey); }
+void MessageImpl::setOrderingKey(const std::string& orderingKey) { metadata_.set_ordering_key(orderingKey); }
 
-void MessageImpl::setEventTimestamp(uint64_t eventTimestamp) { metadata.set_event_time(eventTimestamp); }
+void MessageImpl::setEventTimestamp(uint64_t eventTimestamp) { metadata_.set_event_time(eventTimestamp); }
 
 void MessageImpl::setTopicName(const std::shared_ptr<std::string>& topicName) {
-    topicName_ = topicName;
-    messageId.setTopicName(topicName);
+    if (context_) {
+        context_->topic = topicName;
+        context_->messageId.setTopicName(topicName);
+    }
 }
 
-const std::string& MessageImpl::getTopicName() { return *topicName_; }
+const std::string& MessageImpl::getTopicName() {
+    static std::string kEmptyTopic = "";
+    return context_ ? *context_->topic : kEmptyTopic;
+}
 
-int MessageImpl::getRedeliveryCount() { return redeliveryCount_; }
+int MessageImpl::getRedeliveryCount() { return context_ ? context_->redeliveryCount : 0; }
 
-void MessageImpl::setRedeliveryCount(int count) { redeliveryCount_ = count; }
+void MessageImpl::setRedeliveryCount(int count) {
+    if (context_) {
+        context_->redeliveryCount = count;
+    }
+}
 
-bool MessageImpl::hasSchemaVersion() const { return metadata.has_schema_version(); }
+bool MessageImpl::hasSchemaVersion() const { return metadata_.has_schema_version(); }
 
-void MessageImpl::setSchemaVersion(const std::string& schemaVersion) { schemaVersion_ = &schemaVersion; }
+void MessageImpl::setSchemaVersion(const std::string& schemaVersion) {
+    metadata_.set_schema_version(schemaVersion);
+}
 
-const std::string& MessageImpl::getSchemaVersion() const { return metadata.schema_version(); }
+const std::string& MessageImpl::getSchemaVersion() const { return metadata_.schema_version(); }
 
 void MessageImpl::convertKeyValueToPayload(const pulsar::SchemaInfo& schemaInfo) {
     if (schemaInfo.getSchemaType() != KEY_VALUE) {
@@ -106,9 +125,9 @@ void MessageImpl::convertKeyValueToPayload(const pulsar::SchemaInfo& schemaInfo)
         return;
     }
     KeyValueEncodingType keyValueEncodingType = getKeyValueEncodingType(schemaInfo);
-    payload = keyValuePtr->getContent(keyValueEncodingType);
+    payload_ = keyValuePtr_->getContent(keyValueEncodingType);
     if (keyValueEncodingType == KeyValueEncodingType::SEPARATED) {
-        setPartitionKey(keyValuePtr->getKey());
+        setPartitionKey(keyValuePtr_->getKey());
     }
 }
 
@@ -117,8 +136,8 @@ void MessageImpl::convertPayloadToKeyValue(const pulsar::SchemaInfo& schemaInfo)
         // ignore not key_value schema.
         return;
     }
-    keyValuePtr =
-        std::make_shared<KeyValueImpl>(static_cast<const char*>(payload.data()), payload.readableBytes(),
+    keyValuePtr_ =
+        std::make_shared<KeyValueImpl>(static_cast<const char*>(payload_.data()), payload_.readableBytes(),
                                        getKeyValueEncodingType(schemaInfo));
 }
 

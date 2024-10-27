@@ -813,7 +813,7 @@ std::string Commands::messageType(BaseCommand_Type type) {
 
 void Commands::initBatchMessageMetadata(const Message& msg, pulsar::proto::MessageMetadata& batchMetadata) {
     // metadata has already been set in ProducerImpl::setMessageMetadata
-    const proto::MessageMetadata& metadata = msg.impl_->metadata;
+    const auto& metadata = msg.impl_->metadata();
 
     // required fields
     batchMetadata.set_producer_name(metadata.producer_name());
@@ -885,7 +885,7 @@ uint64_t Commands::serializeSingleMessagesToBatchPayload(SharedBuffer& batchPayl
     for (size_t i = 0; i < messages.size(); i++) {
         const auto& impl = messages[i].impl_;
         singleMetadataBuffers[i] =
-            serializeSingleMessageMetadata(impl->metadata, impl->payload.readableBytes());
+            serializeSingleMessageMetadata(impl->metadata(), impl->payload().readableBytes());
         size += singleMetadataBuffers[i].second;
         size += messages[i].getLength();
     }
@@ -897,16 +897,16 @@ uint64_t Commands::serializeSingleMessagesToBatchPayload(SharedBuffer& batchPayl
         auto msgMetadataSize = singleMetadataBuffers[i].second;
         batchPayload.writeUnsignedInt(msgMetadataSize);
         batchPayload.write(singleMetadataBuffers[i].first.get(), msgMetadataSize);
-        const auto& payload = messages[i].impl_->payload;
+        const auto& payload = messages[i].impl_->payload();
         batchPayload.write(payload.data(), payload.readableBytes());
     }
 
-    return messages.back().impl_->metadata.sequence_id();
+    return messages.back().impl_->metadata().sequence_id();
 }
 
 Message Commands::deSerializeSingleMessageInBatch(Message& batchedMessage, int32_t batchIndex,
                                                   int32_t batchSize, const BatchMessageAckerPtr& acker) {
-    SharedBuffer& uncompressedPayload = batchedMessage.impl_->payload;
+    SharedBuffer& uncompressedPayload = batchedMessage.impl_->payload();
 
     // Format of batch message
     // Each Message = [METADATA_SIZE][METADATA] [PAYLOAD]
@@ -922,15 +922,16 @@ Message Commands::deSerializeSingleMessageInBatch(Message& batchedMessage, int32
     SharedBuffer payload = uncompressedPayload.slice(0, payloadSize);
     uncompressedPayload.consume(payloadSize);
 
-    const MessageId& m = batchedMessage.impl_->messageId;
+    const MessageId& m = batchedMessage.impl_->messageId();
     auto messageId = MessageIdBuilder::from(m).batchIndex(batchIndex).batchSize(batchSize).build();
     auto batchedMessageId = std::make_shared<BatchedMessageIdImpl>(*(messageId.impl_), acker);
-    Message singleMessage(MessageId{batchedMessageId}, batchedMessage.impl_->brokerEntryMetadata,
-                          batchedMessage.impl_->metadata, payload, metadata,
-                          batchedMessage.impl_->topicName_);
-    singleMessage.impl_->cnx_ = batchedMessage.impl_->cnx_;
 
-    return singleMessage;
+    auto copiedMetadata = batchedMessage.impl_->metadata();
+    auto msgImpl = std::make_shared<MessageImpl>(
+        std::move(copiedMetadata), std::move(payload),
+        batchedMessage.impl_->index() >= 0 ? batchedMessage.impl_->index() : -1, MessageId{batchedMessageId},
+        batchedMessage.impl_->topicName(), batchedMessage.impl_->cnx());
+    return Message{msgImpl};
 }
 
 MessageIdImplPtr Commands::getMessageIdImpl(const MessageId& messageId) { return messageId.impl_; }

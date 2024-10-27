@@ -256,7 +256,7 @@ class PULSAR_PUBLIC ClientConnection : public std::enable_shared_from_this<Clien
     void handleIncomingCommand(proto::BaseCommand& incomingCmd);
     void handleIncomingMessage(const proto::CommandMessage& msg, bool isChecksumValid,
                                proto::BrokerEntryMetadata& brokerEntryMetadata,
-                               proto::MessageMetadata& msgMetadata, SharedBuffer& payload);
+                               proto::MessageMetadata&& msgMetadata, SharedBuffer&& payload);
 
     void handlePulsarConnected(const proto::CommandConnected& cmdConnected);
 

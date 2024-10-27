@@ -368,7 +368,7 @@ void ProducerImpl::resendMessages(ClientConnectionPtr cnx) {
 void ProducerImpl::setMessageMetadata(const Message& msg, const uint64_t& sequenceId,
                                       const uint32_t& uncompressedSize) {
     // Call this function after acquiring the mutex_
-    proto::MessageMetadata& msgMetadata = msg.impl_->metadata;
+    proto::MessageMetadata& msgMetadata = msg.impl_->metadata();
     msgMetadata.set_producer_name(producerName_);
     msgMetadata.set_publish_time(TimeUtils::currentTimeMillis());
     msgMetadata.set_sequence_id(sequenceId);
@@ -457,7 +457,7 @@ bool ProducerImpl::isValidProducerState(const SendCallback& callback) const {
 
 bool ProducerImpl::canAddToBatch(const Message& msg) const {
     // If a message has a delayed delivery time, we'll always send it individually
-    return batchMessageContainer_.get() && !msg.impl_->metadata.has_deliver_at_time();
+    return batchMessageContainer_.get() && !msg.impl_->metadata().has_deliver_at_time();
 }
 
 static SharedBuffer applyCompression(const SharedBuffer& uncompressedPayload,
@@ -493,7 +493,7 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
 
     // Convert the payload before sending the message.
     msg.impl_->convertKeyValueToPayload(conf_.getSchema());
-    const auto& uncompressedPayload = msg.impl_->payload;
+    const auto& uncompressedPayload = msg.impl_->payload();
     const uint32_t uncompressedSize = uncompressedPayload.readableBytes();
     const auto result = canEnqueueRequest(uncompressedSize);
     if (result != ResultOk) {
@@ -517,7 +517,7 @@ void ProducerImpl::sendAsyncWithStatsUpdate(const Message& msg, SendCallback&& c
         callback(result, {});
     };
 
-    auto& msgMetadata = msg.impl_->metadata;
+    auto& msgMetadata = msg.impl_->metadata();
     const bool compressed = !canAddToBatch(msg);
     const auto payload =
         compressed ? applyCompression(uncompressedPayload, conf_.getCompressionType()) : uncompressedPayload;

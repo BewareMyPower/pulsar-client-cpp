@@ -98,7 +98,7 @@ class ConsumerImpl : public ConsumerImplBase {
     uint64_t getConsumerId();
     void messageReceived(const ClientConnectionPtr& cnx, const proto::CommandMessage& msg,
                          bool& isChecksumValid, proto::BrokerEntryMetadata& brokerEntryMetadata,
-                         proto::MessageMetadata& msgMetadata, SharedBuffer& payload);
+                         proto::MessageMetadata&& msgMetadata, SharedBuffer&& payload);
     void messageProcessed(Message& msg, bool track = true);
     void activeConsumerChanged(bool isActive);
     inline CommandSubscribe_SubType getSubType();

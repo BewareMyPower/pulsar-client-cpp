@@ -59,30 +59,30 @@ void MessageBuilder::checkMetadata() {
 
 MessageBuilder& MessageBuilder::setContent(const void* data, size_t size) {
     checkMetadata();
-    impl_->payload = SharedBuffer::copy((char*)data, size);
+    impl_->payload() = SharedBuffer::copy((char*)data, size);
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setAllocatedContent(void* data, size_t size) {
     checkMetadata();
-    impl_->payload = SharedBuffer::wrap((char*)data, size);
+    impl_->payload() = SharedBuffer::wrap((char*)data, size);
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setContent(const std::string& data) {
     checkMetadata();
-    impl_->payload = SharedBuffer::copy((char*)data.c_str(), data.length());
+    impl_->payload() = SharedBuffer::copy((char*)data.c_str(), data.length());
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setContent(std::string&& data) {
     checkMetadata();
-    impl_->payload = SharedBuffer::take(std::move(data));
+    impl_->payload() = SharedBuffer::take(std::move(data));
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setContent(const KeyValue& data) {
-    impl_->keyValuePtr = data.impl_;
+    impl_->keyValuePtr() = data.impl_;
     return *this;
 }
 
@@ -91,7 +91,7 @@ MessageBuilder& MessageBuilder::setProperty(const std::string& name, const std::
     proto::KeyValue* keyValue = proto::KeyValue().New();
     keyValue->set_key(name);
     keyValue->set_value(value);
-    impl_->metadata.mutable_properties()->AddAllocated(keyValue);
+    impl_->metadata().mutable_properties()->AddAllocated(keyValue);
     return *this;
 }
 
@@ -105,19 +105,19 @@ MessageBuilder& MessageBuilder::setProperties(const StringMap& properties) {
 
 MessageBuilder& MessageBuilder::setPartitionKey(const std::string& partitionKey) {
     checkMetadata();
-    impl_->metadata.set_partition_key(partitionKey);
+    impl_->metadata().set_partition_key(partitionKey);
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setOrderingKey(const std::string& orderingKey) {
     checkMetadata();
-    impl_->metadata.set_ordering_key(orderingKey);
+    impl_->metadata().set_ordering_key(orderingKey);
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setEventTimestamp(uint64_t eventTimestamp) {
     checkMetadata();
-    impl_->metadata.set_event_time(eventTimestamp);
+    impl_->metadata().set_event_time(eventTimestamp);
     return *this;
 }
 
@@ -126,7 +126,7 @@ MessageBuilder& MessageBuilder::setSequenceId(int64_t sequenceId) {
         throw std::invalid_argument("sequenceId needs to be >= 0");
     }
     checkMetadata();
-    impl_->metadata.set_sequence_id(sequenceId);
+    impl_->metadata().set_sequence_id(sequenceId);
     return *this;
 }
 
@@ -136,14 +136,14 @@ MessageBuilder& MessageBuilder::setDeliverAfter(std::chrono::milliseconds delay)
 
 MessageBuilder& MessageBuilder::setDeliverAt(uint64_t deliveryTimestamp) {
     checkMetadata();
-    impl_->metadata.set_deliver_at_time(deliveryTimestamp);
+    impl_->metadata().set_deliver_at_time(deliveryTimestamp);
     return *this;
 }
 
 MessageBuilder& MessageBuilder::setReplicationClusters(const std::vector<std::string>& clusters) {
     checkMetadata();
     google::protobuf::RepeatedPtrField<std::string> r(clusters.begin(), clusters.end());
-    r.Swap(impl_->metadata.mutable_replicate_to());
+    r.Swap(impl_->metadata().mutable_replicate_to());
     return *this;
 }
 
@@ -153,18 +153,18 @@ MessageBuilder& MessageBuilder::disableReplication(bool flag) {
     if (flag) {
         r.AddAllocated(new std::string("__local__"));
     }
-    r.Swap(impl_->metadata.mutable_replicate_to());
+    r.Swap(impl_->metadata().mutable_replicate_to());
     return *this;
 }
 
 const char* MessageBuilder::data() const {
-    assert(impl_->payload.data());
-    return impl_->payload.data();
+    assert(impl_->payload().data());
+    return impl_->payload().data();
 }
 
 size_t MessageBuilder::size() const {
-    assert(impl_->payload.data());
-    return impl_->payload.readableBytes();
+    assert(impl_->payload().data());
+    return impl_->payload().readableBytes();
 }
 
 }  // namespace pulsar
