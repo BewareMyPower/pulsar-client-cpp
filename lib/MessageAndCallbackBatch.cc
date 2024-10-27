@@ -92,7 +92,7 @@ static void completeSendCallbacks(const std::vector<SendCallback>& callbacks, Re
                                   const MessageId& id) {
     int32_t numOfMessages = static_cast<int32_t>(callbacks.size());
     for (int32_t i = 0; i < numOfMessages; i++) {
-        callbacks[i](result, MessageIdBuilder::from(id).batchIndex(i).batchSize(numOfMessages).build());
+        callbacks[i](result, MessageIdBuilder::from(id).batchIndex(i).build());
     }
 }
 
