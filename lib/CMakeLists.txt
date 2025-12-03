@@ -110,6 +110,10 @@ if (BUILD_STATIC_LIB)
         if (NOT CMAKE_CL_64)
             # x86 build - disable interprocedural optimization to avoid memory insufficiency issues:
             # error MSB6006: "CL.exe" exited with code -1073741819.
+            target_compile_options(PULSAR_OBJECT_LIB PRIVATE
+                $<$<AND:$<STREQUAL:$<TARGET_POLICY:CMP0134>,OLD>:$<STREQUAL:$<CONFIG:Release>,Release>:$<STREQUAL:$<C_COMPILER_ID>,MSVC>>: /Os>
+                # The flag above ensures that the optimization level is set to /Os (optimize for size)
+            )
             set_property(TARGET PULSAR_OBJECT_LIB PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
             target_compile_options(PULSAR_OBJECT_LIB PRIVATE "/Zm2000")
         endif()
