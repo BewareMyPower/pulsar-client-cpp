@@ -108,8 +108,9 @@ if (BUILD_STATIC_LIB)
         ${CMAKE_SOURCE_DIR}/include)
     if (MSVC)
         if (NOT CMAKE_CL_64)
-            # x86 build - apply memory increase for CL.exe
-            target_compile_options(PULSAR_OBJECT_LIB PRIVATE "/Zm1000")
+            # x86 build - disable interprocedural optimization to avoid memory insufficiency issues:
+            # error MSB6006: "CL.exe" exited with code -1073741819. 
+            set_property(TARGET PULSAR_OBJECT_LIB PROPERTY INTERPROCEDURAL_OPTIMIZATION FALSE)
         endif()
         set_property(TARGET pulsarStatic PROPERTY OUTPUT_NAME "${LIB_NAME}-static")
         target_include_directories(pulsarStatic PRIVATE ${dlfcn-win32_INCLUDE_DIRS})
