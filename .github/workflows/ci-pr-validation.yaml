@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
-            cmake --build ./build-1 --config Release
+            cmake --build ./build-1 --verbose --config Release
             cmake --install ./build-1
           fi
 
