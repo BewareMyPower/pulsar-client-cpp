@@ -55,15 +55,6 @@ else ()
     set(LATEST_PROTOBUF FALSE)
 endif ()
 
-if (NOT CMAKE_CXX_STANDARD)
-    if (LATEST_PROTOBUF)
-        set(CMAKE_CXX_STANDARD 17)
-    else ()
-        set(CMAKE_CXX_STANDARD 11)
-    endif ()
-endif ()
-set(CMAKE_C_STANDARD 11)
-
 # For dependencies other than OpenSSL, dynamic libraries are forbidden to link when LINK_STATIC is ON
 if (LINK_STATIC)
     if (NOT MSVC)
