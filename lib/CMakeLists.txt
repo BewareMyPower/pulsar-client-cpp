@@ -109,7 +109,7 @@ if (BUILD_STATIC_LIB)
     if (MSVC)
         if (NOT CMAKE_CL_64)
             # x86 build - apply memory increase for CL.exe
-            target_compile_options(PULSAR_OBJECT_LIB PRIVATE "/Zm500")
+            target_compile_options(PULSAR_OBJECT_LIB PRIVATE "/Zm1000")
         endif()
         set_property(TARGET pulsarStatic PROPERTY OUTPUT_NAME "${LIB_NAME}-static")
         target_include_directories(pulsarStatic PRIVATE ${dlfcn-win32_INCLUDE_DIRS})
