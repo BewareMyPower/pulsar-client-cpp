@@ -23,7 +23,7 @@ networks:
     driver: bridge
 services:
   standalone:
-    image: apachepulsar/pulsar:latest
+    image: lhotari/pulsar:3.3.4-bb11a99
     container_name: standalone
     hostname: local
     restart: "no"
