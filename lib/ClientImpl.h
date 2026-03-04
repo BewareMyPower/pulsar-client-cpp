@@ -24,6 +24,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 
 #include "ConnectionPool.h"
 #include "Future.h"
@@ -31,6 +32,7 @@
 #include "MemoryLimitController.h"
 #include "ProtoApiEnums.h"
 #include "SynchronizedHashMap.h"
+#include "lib/AtomicSharedPtr.h"
 
 namespace pulsar {
 
@@ -141,6 +143,9 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     static std::chrono::nanoseconds getOperationTimeout(const ClientConfiguration& clientConfiguration);
 
+    void updateConnectionInfo(const std::string& serviceUrl, const std::optional<const AuthenticationPtr>& authentication,
+                const std::optional<std::string>& tlsTrustCertsFilePath);
+
     friend class PulsarFriend;
 
    private:
@@ -192,13 +197,14 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     State state_;
     ClientConfiguration clientConfiguration_;
+    mutable std::mutex updateConfigMutex_;
     MemoryLimitController memoryLimitController_;
 
     ExecutorServiceProviderPtr ioExecutorProvider_;
     ExecutorServiceProviderPtr listenerExecutorProvider_;
     ExecutorServiceProviderPtr partitionListenerExecutorProvider_;
 
-    LookupServicePtr lookupServicePtr_;
+    AtomicSharedPtr<LookupService> lookupServicePtr_;
     std::unordered_map<std::string, LookupServicePtr> redirectedClusterLookupServicePtrs_;
     ConnectionPool pool_;
 

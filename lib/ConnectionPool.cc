@@ -54,6 +54,11 @@ bool ConnectionPool::close() {
         return false;
     }
 
+    closeAllConnections();
+    return true;
+}
+
+void ConnectionPool::closeAllConnections() {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
 
     for (auto cnxIt = pool_.begin(); cnxIt != pool_.end(); cnxIt++) {
@@ -64,7 +69,6 @@ bool ConnectionPool::close() {
         }
     }
     pool_.clear();
-    return true;
 }
 
 static const std::string getKey(const std::string& logicalAddress, const std::string& physicalAddress,

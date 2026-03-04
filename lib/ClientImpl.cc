@@ -119,7 +119,9 @@ ClientImpl::ClientImpl(const std::string& serviceUrl, const ClientConfiguration&
     if (loggerFactory) {
         LogUtils::setLoggerFactory(std::move(loggerFactory));
     }
-    lookupServicePtr_ = createLookup(serviceUrl);
+    auto lookupServicePtr = createLookup(serviceUrl);
+    // this is the 1st lookup service created, no need to check the return value
+    lookupServicePtr_.swap(lookupServicePtr);
 }
 
 ClientImpl::~ClientImpl() { shutdown(); }
@@ -133,6 +135,28 @@ LookupServicePtr ClientImpl::createLookup(const std::string& serviceUrl) {
 
 const ClientConfiguration& ClientImpl::conf() const { return clientConfiguration_; }
 
+void ClientImpl::updateConnectionInfo(const std::string& serviceUrl,
+                                      const std::optional<const AuthenticationPtr>& authentication,
+                                      const std::optional<std::string>& tlsTrustCertsFilePath) {
+    // This lock is only used to prevent concurrent updates on the config. The visibility of the changes on
+    // client configuration to the LookupService is guaranteed by the atomic swap of the LookupService
+    // pointer.
+    std::lock_guard<std::mutex> lock(updateConfigMutex_);
+    if (authentication) {
+        clientConfiguration_.setAuth(*authentication);
+    }
+    if (tlsTrustCertsFilePath) {
+        clientConfiguration_.setTlsTrustCertsFilePath(*tlsTrustCertsFilePath);
+    }
+    pool_.closeAllConnections();
+
+    auto lookupServicePtr = createLookup(serviceUrl);
+    auto previousLookup = lookupServicePtr_.swap(lookupServicePtr);
+    if (previousLookup) {
+        previousLookup->close();
+    }
+}
+
 MemoryLimitController& ClientImpl::getMemoryLimitController() { return memoryLimitController_; }
 
 ExecutorServiceProviderPtr ClientImpl::getIOExecutorProvider() { return ioExecutorProvider_; }
@@ -145,7 +169,7 @@ ExecutorServiceProviderPtr ClientImpl::getPartitionListenerExecutorProvider() {
 
 LookupServicePtr ClientImpl::getLookup(const std::string& redirectedClusterURI) {
     if (redirectedClusterURI.empty()) {
-        return lookupServicePtr_;
+        return lookupServicePtr_.get();
     }
 
     Lock lock(mutex_);
@@ -403,7 +427,7 @@ void ClientImpl::createPatternMultiTopicsConsumer(Result result, const Namespace
 
         consumer = std::make_shared<PatternMultiTopicsConsumerImpl>(shared_from_this(), regexPattern, mode,
                                                                     *matchTopics, subscriptionName, conf,
-                                                                    lookupServicePtr_, interceptors);
+                                                                    lookupServicePtr_.get(), interceptors);
 
         consumer->getConsumerCreatedFuture().addListener(
             std::bind(&ClientImpl::handleConsumerCreated, shared_from_this(), std::placeholders::_1,
@@ -449,8 +473,9 @@ void ClientImpl::subscribeAsync(const std::vector<std::string>& originalTopics,
 
     auto interceptors = std::make_shared<ConsumerInterceptors>(conf.getInterceptors());
 
-    ConsumerImplBasePtr consumer = std::make_shared<MultiTopicsConsumerImpl>(
-        shared_from_this(), topics, subscriptionName, topicNamePtr, conf, lookupServicePtr_, interceptors);
+    ConsumerImplBasePtr consumer =
+        std::make_shared<MultiTopicsConsumerImpl>(shared_from_this(), topics, subscriptionName, topicNamePtr,
+                                                  conf, lookupServicePtr_.get(), interceptors);
 
     consumer->getConsumerCreatedFuture().addListener(std::bind(&ClientImpl::handleConsumerCreated,
                                                                shared_from_this(), std::placeholders::_1,
@@ -505,7 +530,7 @@ void ClientImpl::handleSubscribe(Result result, const LookupDataResultPtr& parti
                 }
                 consumer = std::make_shared<MultiTopicsConsumerImpl>(
                     shared_from_this(), topicName, partitionMetadata->getPartitions(), subscriptionName, conf,
-                    lookupServicePtr_, interceptors);
+                    lookupServicePtr_.get(), interceptors);
             } else {
                 auto consumerImpl = std::make_shared<ConsumerImpl>(shared_from_this(), topicName->toString(),
                                                                    subscriptionName, conf,

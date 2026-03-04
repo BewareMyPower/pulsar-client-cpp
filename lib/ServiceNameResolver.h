@@ -53,6 +53,8 @@ class ServiceNameResolver {
         return serviceUri_.getServiceHosts()[(numAddresses_ == 1) ? 0 : (index_++ % numAddresses_)];
     }
 
+    const auto& serviceUri() const noexcept { return serviceUri_; }
+
    private:
     const ServiceURI serviceUri_;
     const size_t numAddresses_;

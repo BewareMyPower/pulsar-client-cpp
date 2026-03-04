@@ -32,17 +32,20 @@ class ServiceURI {
      * @param uriString the URL string that is used to create a pulsar::Client object
      * @throws std::invalid_argument if `uriString` is invalid
      */
-    ServiceURI(const std::string& uriString) : data_(parse(uriString)) {}
+    ServiceURI(const std::string& uriString) : uriString_(uriString), data_(parse(uriString)) {}
 
     PulsarScheme getScheme() const noexcept { return data_.first; }
 
     const std::vector<std::string>& getServiceHosts() const noexcept { return data_.second; }
+
+    const auto& uriString() const noexcept { return uriString_; }
 
    private:
     // The 2 elements of the pair are:
     // 1. The Scheme of the lookup protocol
     // 2. The available addresses, each item is like "pulsar://localhost:6650"
     using DataType = std::pair<PulsarScheme, std::vector<std::string>>;
+    const std::string uriString_;
     const DataType data_;
 
     static DataType parse(const std::string& uriString);

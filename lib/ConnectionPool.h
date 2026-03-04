@@ -51,6 +51,8 @@ class PULSAR_PUBLIC ConnectionPool {
      */
     bool close();
 
+    void closeAllConnections();
+
     void remove(const std::string& logicalAddress, const std::string& physicalAddress, size_t keySuffix,
                 ClientConnection* value);
 
