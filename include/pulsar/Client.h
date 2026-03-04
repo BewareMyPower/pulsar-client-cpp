@@ -32,6 +32,7 @@
 #include <pulsar/TableView.h>
 #include <pulsar/defines.h>
 
+#include <memory>
 #include <string>
 
 namespace pulsar {
@@ -413,6 +414,27 @@ class PULSAR_PUBLIC Client {
      */
     void getSchemaInfoAsync(const std::string& topic, int64_t version,
                             std::function<void(Result, const SchemaInfo&)> callback);
+
+    /**
+     * Probe the provided service URL to check if it's valid and reachable. The callback will be called with
+     * `true` in `ClientImpl`'s internal I/O thread.
+     */
+    void probe(const std::string& serviceUrl, std::function<void(bool)>&& callback);
+
+    /**
+     * Update the connection info.
+     * When this method is called, all existing connections will be closed, then the client will start using
+     * the new connection info for new operations and `getServiceUrl` will return the new URL.
+     *
+     * @param serviceUrl The new service URL to connect to.
+     * @param authentication The optional new authentication information to use when connecting to the service
+     * URL.
+     * @param tlsTrustCertsFilePath The optional new TLS trust certificate file path to use when connecting to
+     * the service URL.
+     */
+    void updateConnectionInfo(const std::string& serviceUrl,
+                              const std::optional<const AuthenticationPtr>& authentication,
+                              const std::optional<std::string>& tlsTrustCertsFilePath);
 
    private:
     Client(const std::shared_ptr<ClientImpl>&);

@@ -156,7 +156,7 @@ class PULSAR_PUBLIC ClientConnection : public std::enable_shared_from_this<Clien
      * @param probeCallback callback to be called when tcp connection is established
      * @return future<ConnectionPtr> which is not yet set
      */
-    void tcpConnectAsync(const std::optional<std::function<void(bool)>>& probeCallback = std::nullopt);
+    void tcpConnectAsync(std::optional<std::function<void(bool)>> probeCallback = std::nullopt);
 
     /**
      * Close the connection.

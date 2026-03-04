@@ -89,7 +89,7 @@ class PULSAR_PUBLIC ConnectionPool {
         return getConnectionAsync(address, address);
     }
 
-    Future<Result, bool> probe(const std::string& serviceUrl);
+    void probe(const std::string& serviceUrl, std::function<void(bool)>&& callback);
 
     size_t generateRandomIndex() { return randomDistribution_(randomEngine_); }
 

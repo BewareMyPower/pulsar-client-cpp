@@ -572,7 +572,7 @@ void ClientConnection::handleSentAuthResponse(const ASIO_ERROR& err, const Share
  * tcpConnectCompletionHandler is notified when the result of this call is available.
  *
  */
-void ClientConnection::tcpConnectAsync(const std::optional<std::function<void(bool)>>& probeCallback) {
+void ClientConnection::tcpConnectAsync(std::optional<std::function<void(bool)>> probeCallback) {
     if (isClosed()) {
         return;
     }
@@ -596,13 +596,14 @@ void ClientConnection::tcpConnectAsync(const std::optional<std::function<void(bo
     LOG_DEBUG(cnxString_ << "Resolving " << service_url.host() << ":" << service_url.port());
 
     auto weakSelf = weak_from_this();
-    resolver_->async_resolve(service_url.host(), std::to_string(service_url.port()),
-                             [weakSelf, probeCallback](auto err, const auto& results) {
-                                 auto self = weakSelf.lock();
-                                 if (self) {
-                                     self->handleResolve(err, results, probeCallback);
-                                 }
-                             });
+    resolver_->async_resolve(
+        service_url.host(), std::to_string(service_url.port()),
+        [weakSelf, probeCallback{std::move(probeCallback)}](auto err, const auto& results) {
+            auto self = weakSelf.lock();
+            if (self) {
+                self->handleResolve(err, results, probeCallback);
+            }
+        });
 }
 
 void ClientConnection::handleResolve(ASIO_ERROR err, const tcp::resolver::results_type& results,
@@ -644,16 +645,18 @@ void ClientConnection::handleResolve(ASIO_ERROR err, const tcp::resolver::result
     });
     connectTimeoutTask_->start();
     ASIO::async_connect(*socket_, results,
-                        [weakSelf, probeCallback](const ASIO_ERROR& err, const tcp::endpoint& endpoint) {
+                        [this, weakSelf, probeCallback{std::move(probeCallback)}](
+                            const ASIO_ERROR& err, const tcp::endpoint& endpoint) {
                             auto self = weakSelf.lock();
                             if (!self) {
                                 return;
                             }
                             if (probeCallback) {
                                 (*probeCallback)(err == ASIO_SUCCESS);
+                                close();
                                 return;
                             }
-                            self->handleTcpConnected(err, endpoint);
+                            handleTcpConnected(err, endpoint);
                         });
 }
 

@@ -22,6 +22,7 @@
 #include <pulsar/ClientConfiguration.h>
 
 #include <chrono>
+#include <memory>
 
 namespace pulsar {
 

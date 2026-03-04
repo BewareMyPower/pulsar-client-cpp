@@ -19,15 +19,12 @@
 #ifndef PULSAR_SERVICE_URL_PROVIDER_H_
 #define PULSAR_SERVICE_URL_PROVIDER_H_
 
-#include <pulsar/Authentication.h>
-
-#include <functional>
-#include <memory>
-#include <optional>
+#include <pulsar/defines.h>
+#include <string>
 
 namespace pulsar {
 
-class ClientImpl;
+class Client;
 
 /**
  * Interface that allows dynamically providing the Pulsar service URL.
@@ -38,52 +35,21 @@ class PULSAR_PUBLIC ServiceUrlProvider {
      * Initialize the provider with a reference to the client implementation. This method is called internally
      * by `Client` after creating the `ClientImpl` instance.
      */
-    explicit ServiceUrlProvider(const std::shared_ptr<ClientImpl>& client) : client_(client) {}
     virtual ~ServiceUrlProvider() {}
 
     /**
-     * Implementations are responsible to call `probe` periodically to check the validity of the service URL
-     * and update the connection info accordingly via the methods whose name start with `update`.
+     * Implementations are responsible to detect some URLs and call `Client#updateConnectionInfo` to notify
+     * the client that the service URL has changed.
      */
-    virtual void start() = 0;
-
-    /**
-     * Close the provider and release resources.
-     * This method should be implemented when the implementation starts a background thread to probe the
-     * service URL, so that the background thread can be stopped and joined
-     */
-    virtual void close() {}
-
-    // -----------------------------------------------------------------------------------------------
-    // The following methods are implemented internally via `ClientImpl` and they are all thread-safe.
-
-    /**
-     * Probe the provided service URL to check if it's valid and reachable. The callback will be called with
-     * `true` in `ClientImpl`'s internal I/O thread.
-     */
-    void probe(const std::string& serviceUrl, std::function<void(bool)>&& callback);
+    virtual void initialize(Client& client) = 0;
 
     /**
      * Get the current service URL.
+     * The implementation should return the latest service URL that has been passed to
+     * `Client#updateConnectionInfo`. The client will call this method to get the initial service URL when
+     * starting the connection.
      */
-    std::string getServiceUrl() const;
-
-    /**
-     * Update the connection info.
-     * When this method is called, all existing connections will be closed, then the client will start using
-     * the new connection info for new operations and `getServiceUrl` will return the new URL.
-     *
-     * @param serviceUrl The new service URL to connect to.
-     * @param authentication The optional new authentication information to use when connecting to the service
-     * URL.
-     * @param tlsTrustCertsFilePath The optional new TLS trust certificate file path to use when connecting to
-     * the service URL.
-     */
-    void update(const std::string& serviceUrl, const std::optional<const AuthenticationPtr>& authentication,
-                const std::optional<std::string>& tlsTrustCertsFilePath);
-
-   private:
-    const std::weak_ptr<ClientImpl> client_;
+    virtual std::string getServiceUrl() const = 0;
 };
 
 }  // namespace pulsar

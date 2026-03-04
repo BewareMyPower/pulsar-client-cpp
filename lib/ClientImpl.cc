@@ -135,8 +135,8 @@ LookupServicePtr ClientImpl::createLookup(const std::string& serviceUrl) {
 
 const ClientConfiguration& ClientImpl::conf() const { return clientConfiguration_; }
 
-void ClientImpl::probe(const std::string& serviceUrl, const std::function<void(bool)>& callback) {
-    // TODO:
+void ClientImpl::probe(const std::string& serviceUrl, std::function<void(bool)>&& callback) {
+    pool_.probe(serviceUrl, std::move(callback));
 }
 
 void ClientImpl::updateConnectionInfo(const std::string& serviceUrl,
