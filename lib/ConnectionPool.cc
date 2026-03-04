@@ -137,6 +137,29 @@ Future<Result, ClientConnectionWeakPtr> ConnectionPool::getConnectionAsync(const
     return future;
 }
 
+Future<Result, bool> ConnectionPool::probe(const std::string& serviceUrl) {
+    std::vector<std::string> keys;
+    keys.reserve(clientConfiguration_.getConnectionsPerBroker());
+    for (size_t i = 0; i < clientConfiguration_.getConnectionsPerBroker(); i++) {
+        keys.emplace_back(getKey(serviceUrl, serviceUrl, i));
+    }
+
+    Promise<Result, bool> promise;
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    for (auto&& key : keys) {
+        if (auto it = pool_.find(key); it != pool_.end()) {
+            // There is already a connection to the service URL, so we can consider the probe is successful
+            promise.setValue(true);
+            return promise.getFuture();
+        }
+    }
+
+    auto cnx = std::make_shared<ClientConnection>(serviceUrl, serviceUrl, executorProvider_->get(0),
+                                                  ClientConfiguration{}, nullptr, clientVersion_, *this, 0);
+    cnx->tcpConnectAsync([promise](bool success) { promise.setValue(success); });
+    return promise.getFuture();
+}
+
 void ConnectionPool::remove(const std::string& logicalAddress, const std::string& physicalAddress,
                             size_t keySuffix, ClientConnection* value) {
     auto key = getKey(logicalAddress, physicalAddress, keySuffix);

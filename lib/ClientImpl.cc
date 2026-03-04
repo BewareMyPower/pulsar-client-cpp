@@ -135,6 +135,10 @@ LookupServicePtr ClientImpl::createLookup(const std::string& serviceUrl) {
 
 const ClientConfiguration& ClientImpl::conf() const { return clientConfiguration_; }
 
+void ClientImpl::probe(const std::string& serviceUrl, const std::function<void(bool)>& callback) {
+    // TODO:
+}
+
 void ClientImpl::updateConnectionInfo(const std::string& serviceUrl,
                                       const std::optional<const AuthenticationPtr>& authentication,
                                       const std::optional<std::string>& tlsTrustCertsFilePath) {

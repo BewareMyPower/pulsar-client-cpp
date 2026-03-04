@@ -25,6 +25,7 @@
 #include <any>
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #ifdef USE_ASIO
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
@@ -147,10 +148,15 @@ class PULSAR_PUBLIC ClientConnection : public std::enable_shared_from_this<Clien
     ~ClientConnection();
 
     /*
-     * starts tcp connect_async
+     * Start connecting to the broker. The connection will be established asynchronously.
+     * When `probeCallback` is provided, the connection does not send any request to broker and will close
+     * immediately when the tcp connection is established. This is used for connection probing, which only
+     * cares about whether the tcp connection can be established successfully.
+     *
+     * @param probeCallback callback to be called when tcp connection is established
      * @return future<ConnectionPtr> which is not yet set
      */
-    void tcpConnectAsync();
+    void tcpConnectAsync(const std::optional<std::function<void(bool)>>& probeCallback = std::nullopt);
 
     /**
      * Close the connection.
@@ -272,7 +278,8 @@ class PULSAR_PUBLIC ClientConnection : public std::enable_shared_from_this<Clien
 
     void handlePulsarConnected(const proto::CommandConnected& cmdConnected);
 
-    void handleResolve(ASIO_ERROR err, const ASIO::ip::tcp::resolver::results_type& results);
+    void handleResolve(ASIO_ERROR err, const ASIO::ip::tcp::resolver::results_type& results,
+                       const std::optional<std::function<void(bool)>>& probeCallback);
 
     void handleSend(const ASIO_ERROR& err, const SharedBuffer& cmd);
     void handleSendPair(const ASIO_ERROR& err);

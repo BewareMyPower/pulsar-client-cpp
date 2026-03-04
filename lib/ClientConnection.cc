@@ -572,7 +572,7 @@ void ClientConnection::handleSentAuthResponse(const ASIO_ERROR& err, const Share
  * tcpConnectCompletionHandler is notified when the result of this call is available.
  *
  */
-void ClientConnection::tcpConnectAsync() {
+void ClientConnection::tcpConnectAsync(const std::optional<std::function<void(bool)>>& probeCallback) {
     if (isClosed()) {
         return;
     }
@@ -597,15 +597,16 @@ void ClientConnection::tcpConnectAsync() {
 
     auto weakSelf = weak_from_this();
     resolver_->async_resolve(service_url.host(), std::to_string(service_url.port()),
-                             [weakSelf](auto err, const auto& results) {
+                             [weakSelf, probeCallback](auto err, const auto& results) {
                                  auto self = weakSelf.lock();
                                  if (self) {
-                                     self->handleResolve(err, results);
+                                     self->handleResolve(err, results, probeCallback);
                                  }
                              });
 }
 
-void ClientConnection::handleResolve(ASIO_ERROR err, const tcp::resolver::results_type& results) {
+void ClientConnection::handleResolve(ASIO_ERROR err, const tcp::resolver::results_type& results,
+                                     const std::optional<std::function<void(bool)>>& probeCallback) {
     if (err) {
         std::string hostUrl = isSniProxy_ ? cnxString_ : proxyServiceUrl_;
         LOG_ERROR(hostUrl << "Resolve error: " << err << " : " << err.message());
@@ -642,12 +643,18 @@ void ClientConnection::handleResolve(ASIO_ERROR err, const tcp::resolver::result
         ptr->connectTimeoutTask_->stop();
     });
     connectTimeoutTask_->start();
-    ASIO::async_connect(*socket_, results, [weakSelf](const ASIO_ERROR& err, const tcp::endpoint& endpoint) {
-        auto self = weakSelf.lock();
-        if (self) {
-            self->handleTcpConnected(err, endpoint);
-        }
-    });
+    ASIO::async_connect(*socket_, results,
+                        [weakSelf, probeCallback](const ASIO_ERROR& err, const tcp::endpoint& endpoint) {
+                            auto self = weakSelf.lock();
+                            if (!self) {
+                                return;
+                            }
+                            if (probeCallback) {
+                                (*probeCallback)(err == ASIO_SUCCESS);
+                                return;
+                            }
+                            self->handleTcpConnected(err, endpoint);
+                        });
 }
 
 void ClientConnection::readNextCommand() {

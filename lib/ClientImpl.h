@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 
@@ -143,8 +144,10 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     static std::chrono::nanoseconds getOperationTimeout(const ClientConfiguration& clientConfiguration);
 
-    void updateConnectionInfo(const std::string& serviceUrl, const std::optional<const AuthenticationPtr>& authentication,
-                const std::optional<std::string>& tlsTrustCertsFilePath);
+    void probe(const std::string& serviceUrl, const std::function<void(bool)>& callback);
+    void updateConnectionInfo(const std::string& serviceUrl,
+                              const std::optional<const AuthenticationPtr>& authentication,
+                              const std::optional<std::string>& tlsTrustCertsFilePath);
 
     friend class PulsarFriend;
 

@@ -24,7 +24,12 @@
 namespace pulsar {
 
 void ServiceUrlProvider::probe(const std::string& serviceUrl, std::function<void(bool)>&& callback) {
-    // TODO:
+    if (auto client = client_.lock()) {
+        // TODO: add a connection timeout
+        client->probe(serviceUrl, callback);
+    } else {
+        callback(false);
+    }
 }
 
 std::string ServiceUrlProvider::getServiceUrl() const {
