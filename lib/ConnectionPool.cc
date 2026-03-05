@@ -18,6 +18,8 @@
  */
 #include "ConnectionPool.h"
 
+#include <pulsar/Authentication.h>
+
 #ifdef USE_ASIO
 #include <asio/ip/tcp.hpp>
 #include <asio/ssl.hpp>
@@ -155,8 +157,13 @@ void ConnectionPool::probe(const std::string& serviceUrl, std::function<void(boo
     }
 
     auto cnx = std::make_shared<ClientConnection>(serviceUrl, serviceUrl, executorProvider_->get(0),
-                                                  ClientConfiguration{}, nullptr, clientVersion_, *this, 0);
-    cnx->tcpConnectAsync(callback);
+                                                  ClientConfiguration{}, AuthFactory::Disabled(),
+                                                  clientVersion_, *this, 0);
+    // Extend the lifetime of the connection until it's connected or failed
+    cnx->tcpConnectAsync([cnx, callback{std::move(callback)}](bool success) {
+        cnx->close(ResultDisconnected, true);
+        callback(success);
+    });
 }
 
 void ConnectionPool::remove(const std::string& logicalAddress, const std::string& physicalAddress,
